@@ -59,9 +59,7 @@ function AdminPortal() {
     const [students, setStudents] = useState([]);
     const [courses, setCourses] = useState([]);
     const [timetables, setTimetables] = useState([]);
-    const [departments, setDepartments] = useState([]);
-    const [academicYears, setAcademicYears] = useState([]);
-    const [semesters, setSemesters] = useState([]);
+    const [cohorts, setCohorts] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [toast, setToast] = useState(null);
 
@@ -73,9 +71,7 @@ function AdminPortal() {
     });
 
     const [courseForm, setCourseForm] = useState({
-        department_id: '',
-        academic_year_id: '',
-        semester_id: '',
+        cohort_id: '',
         code: '',
         title: '',
         credit_hours: '3',
@@ -130,24 +126,19 @@ function AdminPortal() {
         setIsLoading(true);
 
         try {
-            const [teachersRes, studentsRes, coursesRes, timetablesRes, departmentsRes, yearsRes, semestersRes] =
-                await Promise.all([
-                    apiFetch('/api/v1/admin/teachers'),
-                    apiFetch('/api/v1/admin/students'),
-                    apiFetch('/api/v1/admin/courses'),
-                    apiFetch('/api/v1/admin/timetables'),
-                    apiFetch('/api/v1/admin/departments'),
-                    apiFetch('/api/v1/admin/academic-years'),
-                    apiFetch('/api/v1/admin/semesters'),
-                ]);
+            const [teachersRes, studentsRes, coursesRes, timetablesRes, cohortsRes] = await Promise.all([
+                apiFetch('/api/v1/admin/teachers'),
+                apiFetch('/api/v1/admin/students'),
+                apiFetch('/api/v1/admin/courses'),
+                apiFetch('/api/v1/admin/timetables'),
+                apiFetch('/api/v1/admin/cohorts'),
+            ]);
 
             setTeachers(toArray(teachersRes.data));
             setStudents(toArray(studentsRes.data));
             setCourses(toArray(coursesRes.data));
             setTimetables(toArray(timetablesRes.data));
-            setDepartments(toArray(departmentsRes.data));
-            setAcademicYears(toArray(yearsRes.data));
-            setSemesters(toArray(semestersRes.data));
+            setCohorts(toArray(cohortsRes.data));
 
             if (!timetableForm.course_id && toArray(coursesRes.data).length) {
                 setTimetableForm((prev) => ({ ...prev, course_id: toArray(coursesRes.data)[0].id }));
@@ -193,9 +184,7 @@ function AdminPortal() {
 
         try {
             const payload = {
-                department_id: Number(courseForm.department_id),
-                academic_year_id: Number(courseForm.academic_year_id),
-                semester_id: Number(courseForm.semester_id),
+                cohort_id: Number(courseForm.cohort_id),
                 code: courseForm.code,
                 title: courseForm.title,
                 credit_hours: Number(courseForm.credit_hours),
@@ -208,9 +197,7 @@ function AdminPortal() {
             });
 
             setCourseForm({
-                department_id: '',
-                academic_year_id: '',
-                semester_id: '',
+                cohort_id: '',
                 code: '',
                 title: '',
                 credit_hours: '3',
@@ -528,9 +515,7 @@ function AdminPortal() {
                                     <p className="mt-1 text-sm text-slate-500">{course.description || 'No description provided.'}</p>
 
                                     <div className="mt-4 space-y-2 border-t border-slate-200 pt-3 text-sm text-slate-600">
-                                        <p><span className="font-semibold text-slate-700">Department:</span> {course.department?.name || 'Unknown'}</p>
-                                        <p><span className="font-semibold text-slate-700">Semester:</span> {course.semester?.name || 'Unknown'}</p>
-                                        <p><span className="font-semibold text-slate-700">Academic year:</span> {course.academic_year?.name || course.academicYear?.name || 'Unknown'}</p>
+                                        <p><span className="font-semibold text-slate-700">Vacation cohort:</span> {course.cohort?.name || 'Unassigned'}</p>
                                     </div>
 
                                     <div className="mt-4 flex justify-end">
@@ -713,29 +698,11 @@ function AdminPortal() {
                         <form onSubmit={handleCreateCourse} className="space-y-4">
                             <div className="grid gap-4 md:grid-cols-2">
                                 <div>
-                                    <label className="mb-1 block text-sm font-medium text-slate-700">Department</label>
-                                    <select value={courseForm.department_id} onChange={(event) => setCourseForm({ ...courseForm, department_id: event.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" required>
-                                        <option value="">Select department</option>
-                                        {departments.map((department) => (
-                                            <option key={department.id} value={department.id}>{department.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="mb-1 block text-sm font-medium text-slate-700">Academic year</label>
-                                    <select value={courseForm.academic_year_id} onChange={(event) => setCourseForm({ ...courseForm, academic_year_id: event.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" required>
-                                        <option value="">Select academic year</option>
-                                        {academicYears.map((year) => (
-                                            <option key={year.id} value={year.id}>{year.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="mb-1 block text-sm font-medium text-slate-700">Semester</label>
-                                    <select value={courseForm.semester_id} onChange={(event) => setCourseForm({ ...courseForm, semester_id: event.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" required>
-                                        <option value="">Select semester</option>
-                                        {semesters.map((semester) => (
-                                            <option key={semester.id} value={semester.id}>{semester.name}</option>
+                                    <label className="mb-1 block text-sm font-medium text-slate-700">Vacation Cohort / Batch</label>
+                                    <select value={courseForm.cohort_id} onChange={(event) => setCourseForm({ ...courseForm, cohort_id: event.target.value })} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" required>
+                                        <option value="">Select Vacation Cohort</option>
+                                        {cohorts.map((cohort) => (
+                                            <option key={cohort.id} value={cohort.id}>{cohort.name} ({cohort.code})</option>
                                         ))}
                                     </select>
                                 </div>

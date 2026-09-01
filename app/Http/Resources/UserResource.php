@@ -25,6 +25,22 @@ class UserResource extends JsonResource
                 'name' => $this->role?->name,
                 'slug' => $this->role?->slug,
             ],
+            'enrollments' => $this->whenLoaded('enrollments', function () {
+                return $this->enrollments->map(fn ($enrollment) => [
+                    'id' => $enrollment->id,
+                    'status' => $enrollment->status?->value,
+                    'course_id' => $enrollment->course_id,
+                    'course' => $enrollment->relationLoaded('course') ? [
+                        'id' => $enrollment->course?->id,
+                        'code' => $enrollment->course?->code,
+                        'title' => $enrollment->course?->title,
+                        'cohort_id' => $enrollment->course?->cohort_id,
+                        'cohort' => $enrollment->course?->relationLoaded('cohort')
+                            ? $enrollment->course?->cohort
+                            : null,
+                    ] : null,
+                ]);
+            }),
             'created_at' => $this->created_at,
         ];
     }

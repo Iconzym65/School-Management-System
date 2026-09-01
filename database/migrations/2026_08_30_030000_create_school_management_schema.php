@@ -26,40 +26,19 @@ return new class extends Migration
             $table->string('password')->nullable()->change();
         });
 
-        Schema::create('academic_years', function (Blueprint $table) {
+        Schema::create('cohorts', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
+            $table->string('name', 100);
+            $table->string('code', 32)->unique();
             $table->date('starts_on');
             $table->date('ends_on');
-            $table->boolean('is_current')->default(false);
-            $table->timestamps();
-        });
-
-        Schema::create('semesters', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('academic_year_id')->constrained()->cascadeOnDelete();
-            $table->string('name');
-            $table->date('starts_on');
-            $table->date('ends_on');
-            $table->boolean('is_current')->default(false);
-            $table->timestamps();
-
-            $table->unique(['academic_year_id', 'name']);
-        });
-
-        Schema::create('departments', function (Blueprint $table) {
-            $table->id();
-            $table->string('code')->unique();
-            $table->string('name');
-            $table->text('description')->nullable();
+            $table->boolean('is_active')->default(false);
             $table->timestamps();
         });
 
         Schema::create('courses', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('department_id')->constrained()->restrictOnDelete();
-            $table->foreignId('academic_year_id')->constrained()->restrictOnDelete();
-            $table->foreignId('semester_id')->constrained()->restrictOnDelete();
+            $table->foreignId('cohort_id')->constrained('cohorts')->cascadeOnDelete();
             $table->string('code')->unique();
             $table->string('title');
             $table->unsignedTinyInteger('credit_hours');
@@ -95,7 +74,7 @@ return new class extends Migration
             $table->index(['course_id', 'day_of_week']);
         });
 
-        Schema::create('attendance', function (Blueprint $table) {
+        Schema::create('attendances', function (Blueprint $table) {
             $table->id();
             $table->foreignId('timetable_id')->constrained('timetables')->cascadeOnDelete();
             $table->foreignId('student_id')->constrained('users')->cascadeOnDelete();
@@ -154,13 +133,11 @@ return new class extends Migration
     {
         Schema::dropIfExists('submissions');
         Schema::dropIfExists('assignments');
-        Schema::dropIfExists('attendance');
+        Schema::dropIfExists('attendances');
         Schema::dropIfExists('timetables');
         Schema::dropIfExists('enrollments');
         Schema::dropIfExists('courses');
-        Schema::dropIfExists('departments');
-        Schema::dropIfExists('semesters');
-        Schema::dropIfExists('academic_years');
+        Schema::dropIfExists('cohorts');
         Schema::dropIfExists('settings');
 
         Schema::table('users', function (Blueprint $table) {

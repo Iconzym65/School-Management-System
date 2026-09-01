@@ -16,6 +16,8 @@ class AttendanceOverrideController extends Controller
 
     public function store(Request $request, Timetable $timetable): JsonResponse
     {
+        abort_unless($request->user()?->isTeacher(), 403, 'Only teachers can modify attendance records.');
+
         $data = $request->validate([
             'session_date' => ['required', 'date'],
             'records' => ['required', 'array', 'min:1'],

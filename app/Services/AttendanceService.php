@@ -33,7 +33,7 @@ class AttendanceService
         $sessionDateString = $sessionDate->toDateString();
         $sessionEnd = $timetable->sessionEndOnDate($sessionDateString);
 
-        if (! $overrideWindow && now()->lt($sessionEnd)) {
+        if (! $overrideWindow && $sessionDate->toDateString() === now()->toDateString() && now()->lt($sessionEnd)) {
             throw ValidationException::withMessages([
                 'session_date' => ['Attendance can be recorded after the scheduled class window ends.'],
             ]);

@@ -68,6 +68,13 @@ class GradebookService
             ];
         });
 
+        $studentsPayload = $students->map(fn (User $student) => [
+            'id' => $student->id,
+            'name' => $student->name,
+            'email' => $student->email,
+            'student_number' => $student->student_number,
+        ]);
+
         return [
             'course' => [
                 'id' => $course->id,
@@ -75,6 +82,7 @@ class GradebookService
                 'title' => $course->title,
                 'credit_hours' => $course->credit_hours,
             ],
+            'students' => $studentsPayload,
             'assignments' => $assignments->map(fn ($a) => [
                 'id' => $a->id,
                 'title' => $a->title,

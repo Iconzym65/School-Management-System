@@ -17,7 +17,16 @@ class DashboardController extends Controller
         $slots = Timetable::query()
             ->with('course')
             ->where('teacher_id', $request->user()->id)
-            ->orderByRaw("FIELD(day_of_week, 'MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY','SUNDAY')")
+            ->orderByRaw("CASE day_of_week 
+                WHEN 'MONDAY' THEN 0
+                WHEN 'TUESDAY' THEN 1
+                WHEN 'WEDNESDAY' THEN 2
+                WHEN 'THURSDAY' THEN 3
+                WHEN 'FRIDAY' THEN 4
+                WHEN 'SATURDAY' THEN 5
+                WHEN 'SUNDAY' THEN 6
+                ELSE 7
+            END")
             ->orderBy('start_time')
             ->get();
 
@@ -32,7 +41,7 @@ class DashboardController extends Controller
             ->unique();
 
         $courses = Course::query()
-            ->with(['department', 'semester'])
+            ->with(['cohort'])
             ->whereIn('id', $courseIds)
             ->orderBy('code')
             ->get();

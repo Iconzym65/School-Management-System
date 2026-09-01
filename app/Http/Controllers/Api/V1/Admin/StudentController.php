@@ -19,7 +19,7 @@ class StudentController extends Controller
     public function index(Request $request): JsonResponse
     {
         $students = User::query()
-            ->with('role')
+            ->with(['role', 'enrollments.course.cohort'])
             ->whereHas('role', fn ($q) => $q->where('slug', RoleSlug::Student->value))
             ->when($request->string('status')->toString(), fn ($q, $status) => $q->where('status', $status))
             ->when($request->string('search')->toString(), function ($q, $search) {

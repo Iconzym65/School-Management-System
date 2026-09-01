@@ -34,9 +34,7 @@ Route::prefix('v1')->group(function () {
             Route::patch('students/{student}/status', [Admin\StudentController::class, 'updateStatus']);
             Route::get('students/{student}/transcript', [Admin\GradebookController::class, 'student']);
 
-            Route::apiResource('academic-years', Admin\AcademicYearController::class)->except(['show']);
-            Route::apiResource('semesters', Admin\SemesterController::class)->except(['show']);
-            Route::apiResource('departments', Admin\DepartmentController::class)->except(['show']);
+            Route::apiResource('cohorts', Admin\CohortController::class);
 
             Route::get('courses', [Admin\CourseController::class, 'index']);
             Route::post('courses', [Admin\CourseController::class, 'store']);
@@ -53,6 +51,9 @@ Route::prefix('v1')->group(function () {
             Route::patch('timetables/{timetable}/meeting-link', [Admin\TimetableController::class, 'updateMeetingLink']);
             Route::delete('timetables/{timetable}', [Admin\TimetableController::class, 'destroy']);
             Route::post('timetables/{timetable}/attendance', [Admin\AttendanceOverrideController::class, 'store']);
+
+            Route::get('attendance-logs', [Admin\AcademicAuditController::class, 'attendance']);
+            Route::get('assignment-audits', [Admin\AcademicAuditController::class, 'assignments']);
 
             Route::get('settings', [Admin\SettingController::class, 'index']);
             Route::put('settings', [Admin\SettingController::class, 'update']);

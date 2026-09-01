@@ -7,13 +7,11 @@ use App\Enums\DeliveryMode;
 use App\Enums\EnrollmentStatus;
 use App\Enums\RoleSlug;
 use App\Enums\UserStatus;
-use App\Models\AcademicYear;
 use App\Models\Assignment;
+use App\Models\Cohort;
 use App\Models\Course;
-use App\Models\Department;
 use App\Models\Enrollment;
 use App\Models\Role;
-use App\Models\Semester;
 use App\Models\Submission;
 use App\Models\Timetable;
 use App\Models\User;
@@ -51,25 +49,16 @@ class StudentEndpointsTest extends TestCase
             'must_change_password' => false,
         ]);
 
-        $dept = Department::create(['code' => 'CS', 'name' => 'Computer Science']);
-        $year = AcademicYear::create([
-            'name' => '2026/2027',
-            'starts_on' => '2026-09-01',
-            'ends_on' => '2027-06-30',
-            'is_current' => true,
-        ]);
-        $semester = Semester::create([
-            'academic_year_id' => $year->id,
-            'name' => 'First Semester',
-            'starts_on' => '2026-09-01',
-            'ends_on' => '2027-01-31',
-            'is_current' => true,
+        $cohort = Cohort::create([
+            'name' => 'August 2026 Vacation Batch',
+            'code' => 'VAC-2026-AUG',
+            'starts_on' => '2026-08-01',
+            'ends_on' => '2026-08-31',
+            'is_active' => true,
         ]);
 
         $this->course = Course::create([
-            'department_id' => $dept->id,
-            'academic_year_id' => $year->id,
-            'semester_id' => $semester->id,
+            'cohort_id' => $cohort->id,
             'code' => 'CS101',
             'title' => 'Intro to Programming',
             'credit_hours' => 3,

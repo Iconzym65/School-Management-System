@@ -3,13 +3,12 @@
 namespace App\Models;
 
 use App\Enums\AttendanceStatus;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Attendance extends Model
 {
-    protected $table = 'attendance';
-
     protected $fillable = [
         'timetable_id',
         'student_id',
@@ -27,6 +26,13 @@ class Attendance extends Model
             'status' => AttendanceStatus::class,
             'marked_at' => 'datetime',
         ];
+    }
+
+    public function setSessionDateAttribute($value): void
+    {
+        $this->attributes['session_date'] = $value instanceof \DateTimeInterface
+            ? $value->format('Y-m-d')
+            : Carbon::parse($value)->format('Y-m-d');
     }
 
     public function timetable(): BelongsTo

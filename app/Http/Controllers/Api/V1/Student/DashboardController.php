@@ -23,7 +23,7 @@ class DashboardController extends Controller
             ->pluck('course_id');
 
         $courses = \App\Models\Course::query()
-            ->with(['department', 'semester'])
+            ->with(['cohort'])
             ->whereIn('id', $courseIds)
             ->orderBy('code')
             ->get();

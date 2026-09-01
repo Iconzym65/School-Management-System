@@ -9,9 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Course extends Model
 {
     protected $fillable = [
-        'department_id',
-        'academic_year_id',
-        'semester_id',
+        'cohort_id',
         'code',
         'title',
         'credit_hours',
@@ -25,19 +23,9 @@ class Course extends Model
         ];
     }
 
-    public function department(): BelongsTo
+    public function cohort(): BelongsTo
     {
-        return $this->belongsTo(Department::class);
-    }
-
-    public function academicYear(): BelongsTo
-    {
-        return $this->belongsTo(AcademicYear::class);
-    }
-
-    public function semester(): BelongsTo
-    {
-        return $this->belongsTo(Semester::class);
+        return $this->belongsTo(Cohort::class);
     }
 
     public function enrollments(): HasMany

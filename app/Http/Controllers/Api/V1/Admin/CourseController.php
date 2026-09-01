@@ -18,9 +18,11 @@ class CourseController extends Controller
     public function index(Request $request): JsonResponse
     {
         $courses = Course::query()
-            ->with(['department', 'academicYear', 'semester'])
-            ->when($request->integer('department_id'), fn ($q, $id) => $q->where('department_id', $id))
-            ->when($request->integer('semester_id'), fn ($q, $id) => $q->where('semester_id', $id))
+            ->with(['cohort', 'timetables.teacher'])
+            ->withCount([
+                'enrollments as enrolled_students_count' => fn ($q) => $q->where('status', EnrollmentStatus::Enrolled),
+            ])
+            ->when($request->integer('cohort_id'), fn ($q, $id) => $q->where('cohort_id', $id))
             ->orderBy('code')
             ->paginate(30);
 
@@ -30,31 +32,27 @@ class CourseController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'department_id' => ['required', 'exists:departments,id'],
-            'academic_year_id' => ['required', 'exists:academic_years,id'],
-            'semester_id' => ['required', 'exists:semesters,id'],
+            'cohort_id' => ['required', 'exists:cohorts,id'],
             'code' => ['required', 'string', 'max:32', 'unique:courses,code'],
             'title' => ['required', 'string', 'max:255'],
             'credit_hours' => ['required', 'integer', 'min:1', 'max:12'],
             'description' => ['nullable', 'string'],
         ]);
 
-        return ApiResponse::success(Course::query()->create($data)->load(['department', 'semester']), 'Course created.', 201);
+        return ApiResponse::success(Course::query()->create($data)->load(['cohort']), 'Course created.', 201);
     }
 
     public function show(Course $course): JsonResponse
     {
         return ApiResponse::success(
-            $course->load(['department', 'academicYear', 'semester', 'timetables.teacher', 'enrollments.student'])
+            $course->load(['cohort', 'timetables.teacher', 'enrollments.student'])
         );
     }
 
     public function update(Request $request, Course $course): JsonResponse
     {
         $data = $request->validate([
-            'department_id' => ['sometimes', 'exists:departments,id'],
-            'academic_year_id' => ['sometimes', 'exists:academic_years,id'],
-            'semester_id' => ['sometimes', 'exists:semesters,id'],
+            'cohort_id' => ['sometimes', 'exists:cohorts,id'],
             'code' => ['sometimes', 'string', 'max:32', Rule::unique('courses', 'code')->ignore($course->id)],
             'title' => ['sometimes', 'string', 'max:255'],
             'credit_hours' => ['sometimes', 'integer', 'min:1', 'max:12'],
@@ -63,7 +61,7 @@ class CourseController extends Controller
 
         $course->update($data);
 
-        return ApiResponse::success($course->fresh(['department', 'semester']), 'Course updated.');
+        return ApiResponse::success($course->fresh(['cohort']), 'Course updated.');
     }
 
     public function destroy(Course $course): JsonResponse

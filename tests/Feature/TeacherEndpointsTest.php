@@ -2,23 +2,24 @@
 
 namespace Tests\Feature;
 
+use App\Enums\AttendanceStatus;
 use App\Enums\DayOfWeek;
 use App\Enums\DeliveryMode;
 use App\Enums\EnrollmentStatus;
 use App\Enums\RoleSlug;
 use App\Enums\UserStatus;
-use App\Models\AcademicYear;
 use App\Models\Assignment;
+use App\Models\Attendance;
+use App\Models\Cohort;
 use App\Models\Course;
-use App\Models\Department;
 use App\Models\Enrollment;
 use App\Models\Role;
-use App\Models\Semester;
 use App\Models\Submission;
 use App\Models\Timetable;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -60,25 +61,16 @@ class TeacherEndpointsTest extends TestCase
             'must_change_password' => false,
         ]);
 
-        $dept = Department::create(['code' => 'CS', 'name' => 'Computer Science']);
-        $year = AcademicYear::create([
-            'name' => '2026/2027',
-            'starts_on' => '2026-09-01',
-            'ends_on' => '2027-06-30',
-            'is_current' => true,
-        ]);
-        $semester = Semester::create([
-            'academic_year_id' => $year->id,
-            'name' => 'First Semester',
-            'starts_on' => '2026-09-01',
-            'ends_on' => '2027-01-31',
-            'is_current' => true,
+        $cohort = Cohort::create([
+            'name' => 'August 2026 Vacation Batch',
+            'code' => 'VAC-2026-AUG',
+            'starts_on' => '2026-08-01',
+            'ends_on' => '2026-08-31',
+            'is_active' => true,
         ]);
 
         $this->course = Course::create([
-            'department_id' => $dept->id,
-            'academic_year_id' => $year->id,
-            'semester_id' => $semester->id,
+            'cohort_id' => $cohort->id,
             'code' => 'CS101',
             'title' => 'Intro to Programming',
             'credit_hours' => 3,
@@ -162,6 +154,46 @@ class TeacherEndpointsTest extends TestCase
         $response = $this->getJson("/api/v1/teacher/courses/{$this->course->id}/gradebook");
 
         $response->assertStatus(403);
+    }
+
+    public function test_admin_can_view_gradebook_but_cannot_edit_marks_or_attendance(): void
+    {
+        $adminRole = Role::firstOrCreate(['slug' => RoleSlug::Admin->value], ['name' => 'Admin']);
+        $admin = User::factory()->create([
+            'role_id' => $adminRole->id,
+            'status' => UserStatus::Active,
+            'must_change_password' => false,
+        ]);
+
+        $assignment = Assignment::create([
+            'teacher_id' => $this->teacher->id,
+            'course_id' => $this->course->id,
+            'title' => 'Midterm Quiz',
+            'instructions' => 'Answer the questions.',
+            'max_score' => 100,
+            'due_at' => now()->addWeek(),
+            'is_published' => true,
+            'allow_late' => false,
+        ]);
+
+        $this->assertTrue(Gate::forUser($admin)->allows('view', $assignment));
+        $this->assertFalse(Gate::forUser($admin)->allows('update', $assignment));
+
+        $attendance = Attendance::create([
+            'timetable_id' => $this->timetable->id,
+            'student_id' => $this->student->id,
+            'session_date' => '2026-09-07',
+            'status' => AttendanceStatus::Present,
+            'marked_by' => $this->teacher->id,
+            'marked_at' => now(),
+        ]);
+
+        $this->assertTrue(Gate::forUser($admin)->allows('view', $attendance));
+        $this->assertFalse(Gate::forUser($admin)->allows('update', $attendance));
+
+        Sanctum::actingAs($admin);
+        $response = $this->getJson("/api/v1/admin/courses/{$this->course->id}/gradebook");
+        $response->assertOk();
     }
 
     public function test_teacher_can_view_attendance_roster(): void

@@ -3,17 +3,16 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Semester extends Model
+class Cohort extends Model
 {
     protected $fillable = [
-        'academic_year_id',
         'name',
+        'code',
         'starts_on',
         'ends_on',
-        'is_current',
+        'is_active',
     ];
 
     protected function casts(): array
@@ -21,13 +20,8 @@ class Semester extends Model
         return [
             'starts_on' => 'date',
             'ends_on' => 'date',
-            'is_current' => 'boolean',
+            'is_active' => 'boolean',
         ];
-    }
-
-    public function academicYear(): BelongsTo
-    {
-        return $this->belongsTo(AcademicYear::class);
     }
 
     public function courses(): HasMany

@@ -13,6 +13,10 @@ class EnsureRole
         $user = $request->user();
 
         if (! $user || ! $user->hasRole(...$roles)) {
+            if (! $request->expectsJson()) {
+                return redirect()->route('login')->withErrors(['auth' => 'Access denied to this portal.']);
+            }
+
             return response()->json([
                 'message' => 'You are not authorized to access this resource.',
                 'code' => 'FORBIDDEN_ROLE',

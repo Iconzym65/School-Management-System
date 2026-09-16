@@ -10,6 +10,7 @@ class Course extends Model
 {
     protected $fillable = [
         'cohort_id',
+        'teacher_id',
         'code',
         'title',
         'credit_hours',
@@ -26,6 +27,11 @@ class Course extends Model
     public function cohort(): BelongsTo
     {
         return $this->belongsTo(Cohort::class);
+    }
+
+    public function teacher(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'teacher_id');
     }
 
     public function enrollments(): HasMany

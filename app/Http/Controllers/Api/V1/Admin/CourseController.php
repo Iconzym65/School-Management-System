@@ -3,28 +3,30 @@
 namespace App\Http\Controllers\Api\V1\Admin;
 
 use App\Enums\EnrollmentStatus;
-use App\Enums\RoleSlug;
 use App\Http\Controllers\Controller;
 use App\Models\Course;
 use App\Models\Enrollment;
+use App\Models\Timetable;
 use App\Models\User;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class CourseController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $courses = Course::query()
+        $query = Course::query()
             ->with(['cohort', 'timetables.teacher'])
             ->withCount([
                 'enrollments as enrolled_students_count' => fn ($q) => $q->where('status', EnrollmentStatus::Enrolled),
             ])
             ->when($request->integer('cohort_id'), fn ($q, $id) => $q->where('cohort_id', $id))
-            ->orderBy('code')
-            ->paginate(30);
+            ->orderBy('code');
+
+        $courses = $request->boolean('all') ? $query->get() : $query->paginate(30);
 
         return ApiResponse::success($courses);
     }
@@ -37,9 +39,37 @@ class CourseController extends Controller
             'title' => ['required', 'string', 'max:255'],
             'credit_hours' => ['required', 'integer', 'min:1', 'max:12'],
             'description' => ['nullable', 'string'],
+            'teacher_id' => ['nullable', 'exists:users,id'],
         ]);
 
-        return ApiResponse::success(Course::query()->create($data)->load(['cohort']), 'Course created.', 201);
+        $course = DB::transaction(function () use ($data) {
+            $teacherId = $data['teacher_id'] ?? null;
+            unset($data['teacher_id']);
+
+            $course = Course::query()->create($data);
+
+            // If a teacher is designated upon course creation, ensure a timetable slot exists
+            if ($teacherId) {
+                Timetable::query()->create([
+                    'course_id' => $course->id,
+                    'teacher_id' => $teacherId,
+                    'day_of_week' => 'MONDAY',
+                    'start_time' => '09:00',
+                    'end_time' => '10:30',
+                    'classroom' => 'Virtual Studio Alpha',
+                    'delivery_mode' => 'VIRTUAL',
+                    'virtual_platform' => 'zoom',
+                ]);
+            }
+
+            return $course;
+        });
+
+        return ApiResponse::success(
+            $course->load(['cohort', 'timetables.teacher']),
+            'Course created.',
+            201
+        );
     }
 
     public function show(Course $course): JsonResponse
@@ -57,16 +87,46 @@ class CourseController extends Controller
             'title' => ['sometimes', 'string', 'max:255'],
             'credit_hours' => ['sometimes', 'integer', 'min:1', 'max:12'],
             'description' => ['nullable', 'string'],
+            'teacher_id' => ['nullable', 'exists:users,id'],
         ]);
 
-        $course->update($data);
+        DB::transaction(function () use ($request, $course, $data) {
+            if ($request->has('teacher_id')) {
+                $teacherId = $data['teacher_id'] ?? null;
+                unset($data['teacher_id']);
 
-        return ApiResponse::success($course->fresh(['cohort']), 'Course updated.');
+                if ($teacherId) {
+
+                    $timetable = $course->timetables()->first();
+                    if ($timetable) {
+                        $timetable->update(['teacher_id' => $teacherId]);
+                    } else {
+                        $course->timetables()->create([
+                            'teacher_id' => $teacherId,
+                            'day_of_week' => 'MONDAY',
+                            'start_time' => '09:00',
+                            'end_time' => '10:30',
+                            'classroom' => 'Virtual Studio Alpha',
+                            'delivery_mode' => 'VIRTUAL',
+                            'virtual_platform' => 'zoom',
+                        ]);
+                    }
+                }
+            }
+
+            $course->update($data);
+        });
+
+        return ApiResponse::success($course->fresh(['cohort', 'timetables.teacher']), 'Course updated.');
     }
 
     public function destroy(Course $course): JsonResponse
     {
-        $course->delete();
+        DB::transaction(function () use ($course) {
+            $course->enrollments()->delete();
+            $course->timetables()->delete();
+            $course->delete();
+        });
 
         return ApiResponse::success(null, 'Course deleted.');
     }
@@ -83,7 +143,7 @@ class CourseController extends Controller
 
         $enrollment = Enrollment::query()->updateOrCreate(
             ['student_id' => $student->id, 'course_id' => $course->id],
-            ['status' => $data['status'] ?? EnrollmentStatus::Enrolled],
+            ['status' => $data['status'] ?? EnrollmentStatus::Enrolled]
         );
 
         return ApiResponse::success($enrollment->load('student'), 'Enrollment saved.');

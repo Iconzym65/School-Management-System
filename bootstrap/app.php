@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsurePasswordChanged;
+use App\Http\Middleware\EnsurePortalAuthentication;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\EnsureStudentActive;
 use Illuminate\Foundation\Application;
@@ -20,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => EnsureRole::class,
             'student.active' => EnsureStudentActive::class,
             'password.changed' => EnsurePasswordChanged::class,
+            'portal.auth' => EnsurePortalAuthentication::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

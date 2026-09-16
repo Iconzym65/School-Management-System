@@ -6,7 +6,10 @@ use App\Enums\RoleSlug;
 use App\Enums\UserStatus;
 use App\Models\Role;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
+use App\Notifications\AccountCreatedNotification;
+use App\Support\ApiResponse;
+use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
@@ -14,14 +17,37 @@ class AuthService
 {
     public function __construct(private GoogleAuthService $googleAuth) {}
 
-    public function loginWithPassword(string $email, string $password): array
+    public function loginWithPassword(string $identifier, string $password): array
     {
-        $user = User::query()->with('role')->where('email', $email)->first();
+        $user = User::query()
+            ->with('role')
+            ->where(fn ($query) => $query
+                ->where('email', $identifier)
+                ->orWhere('student_number', $identifier)
+                ->orWhere('employee_id', $identifier))
+            ->first();
 
         if (! $user || ! $user->password || ! Hash::check($password, $user->password)) {
             throw ValidationException::withMessages([
-                'email' => ['The provided credentials are incorrect.'],
+                'identifier' => ['The provided credentials are incorrect.'],
             ]);
+        }
+
+        if ($user->status === UserStatus::Suspended) {
+            throw new HttpResponseException(
+                ApiResponse::error('This account has been suspended.', 403, 'ACCOUNT_SUSPENDED'),
+            );
+        }
+
+        if ($user->status !== UserStatus::Active && $user->isStudent()) {
+            throw new HttpResponseException(
+                ApiResponse::error(
+                    'Your student account is awaiting payment or administrative clearance.',
+                    403,
+                    'STUDENT_INACTIVE',
+                    ['status' => $user->status->value],
+                ),
+            );
         }
 
         return $this->issueToken($user, 'password');
@@ -85,6 +111,7 @@ class AuthService
      */
     public function issueToken(User $user, string $deviceName): array
     {
+        Auth::guard('web')->login($user);
         $user->tokens()->where('name', $deviceName)->delete();
 
         $abilities = match ($user->role?->slug) {
@@ -108,5 +135,13 @@ class AuthService
     public static function roleId(RoleSlug $slug): int
     {
         return (int) Role::query()->where('slug', $slug->value)->valueOrFail('id');
+    }
+
+    /**
+     * Dispatch the queued welcome account creation notification to a user.
+     */
+    public function sendAccountCreatedNotification(User $user, ?string $temporaryPassword = null): void
+    {
+        $user->notify(new AccountCreatedNotification($temporaryPassword));
     }
 }

@@ -1,13 +1,28 @@
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="csrf-token" content="{{ csrf_token() }}">
-        <title>Student Registration - Academic Klinik</title>
-        @viteReactRefresh
-        @vite(['resources/css/app.css', 'resources/js/StudentRegistration.jsx'])
-    </head>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Application &amp; Registration &bull; {{ config('app.name', 'SMS') }}</title>
+   
+    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
+    <link rel="apple-touch-icon" href="{{ asset('logo.png') }}">
+
+        
+    <script>
+        if (
+            localStorage.getItem('theme') === 'dark' ||
+            (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        ) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
+
+    @viteReactRefresh
+    @vite(['resources/css/app.css', 'resources/js/StudentRegistration.jsx'])
+</head>
     <body class="bg-[#072421] text-slate-800 antialiased min-h-screen">
         <div id="student-registration-root"></div>
     </body>

@@ -145,6 +145,15 @@ class AdminAcademicAuditTest extends TestCase
 
     public function test_admin_portal_view_renders(): void
     {
+        $adminRole = Role::firstOrCreate(['slug' => RoleSlug::Admin->value], ['name' => 'Admin']);
+        $admin = User::factory()->create([
+            'role_id' => $adminRole->id,
+            'status' => UserStatus::Active,
+            'must_change_password' => false,
+        ]);
+
+        $this->actingAs($admin);
+
         $this->get('/admin-portal')
             ->assertOk()
             ->assertSee('admin-portal-root', false);

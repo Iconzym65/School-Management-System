@@ -3,11 +3,13 @@
 namespace App\Models;
 
 use App\Enums\RoleSlug;
+use App\Enums\UserStatus;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -25,6 +27,7 @@ use Laravel\Sanctum\HasApiTokens;
     'status',
     'must_change_password',
     'email_verified_at',
+    'cohort_id',
 ])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
@@ -38,7 +41,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'must_change_password' => 'boolean',
-            'status' => \App\Enums\UserStatus::class,
+            'status' => UserStatus::class,
         ];
     }
 
@@ -50,6 +53,18 @@ class User extends Authenticatable
     public function taughtTimetables(): HasMany
     {
         return $this->hasMany(Timetable::class, 'teacher_id');
+    }
+
+    public function cohort(): BelongsTo
+    {
+        return $this->belongsTo(Cohort::class);
+    }
+
+    public function enrolledCourses(): BelongsToMany
+    {
+        return $this->belongsToMany(Course::class, 'enrollments', 'student_id', 'course_id')
+            ->withPivot('status')
+            ->withTimestamps();
     }
 
     public function enrollments(): HasMany
@@ -87,12 +102,17 @@ class User extends Authenticatable
         return in_array($this->role?->slug, $slugs, true);
     }
 
+    public function isActive(): bool
+    {
+        return $this->status === UserStatus::Active;
+    }
+
     public function dashboardPath(): string
     {
         return match ($this->role?->slug) {
-            RoleSlug::Admin->value => '/admin',
-            RoleSlug::Teacher->value => '/teacher',
-            default => '/student',
+            RoleSlug::Admin->value => '/admin-portal',
+            RoleSlug::Teacher->value => '/teacher-portal',
+            default => '/student-portal',
         };
     }
 }

@@ -7,13 +7,18 @@ use App\Models\Assignment;
 use App\Models\Attendance;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class AcademicAuditController extends Controller
 {
-    public function attendance(): JsonResponse
+    public function attendance(Request $request): JsonResponse
     {
         $logs = Attendance::query()
-            ->with(['student', 'marker', 'timetable.course'])
+            ->with(['student', 'marker', 'timetable.course.cohort'])
+            // Scope attendance records strictly by the operating cohort
+            ->when($request->integer('cohort_id'), function ($q, $cohortId) {
+                $q->whereHas('timetable.course', fn ($c) => $c->where('cohort_id', $cohortId));
+            })
             ->latest('session_date')
             ->latest('id')
             ->limit(200)
@@ -22,6 +27,7 @@ class AcademicAuditController extends Controller
                 'id' => $log->id,
                 'session_date' => $log->session_date?->toDateString(),
                 'course_code' => $log->timetable?->course?->code,
+                'cohort_code' => $log->timetable?->course?->cohort?->code,
                 'student_name' => $log->student?->name,
                 'student_number' => $log->student?->student_number,
                 'status' => strtolower((string) $log->status?->value),
@@ -32,10 +38,14 @@ class AcademicAuditController extends Controller
         return ApiResponse::success($logs);
     }
 
-    public function assignments(): JsonResponse
+    public function assignments(Request $request): JsonResponse
     {
         $assignments = Assignment::query()
-            ->with(['course', 'teacher', 'submissions'])
+            ->with(['course.cohort', 'teacher', 'submissions'])
+            // Scope assignments strictly by the operating cohort
+            ->when($request->integer('cohort_id'), function ($q, $cohortId) {
+                $q->whereHas('course', fn ($c) => $c->where('cohort_id', $cohortId));
+            })
             ->latest('due_at')
             ->limit(200)
             ->get()
@@ -47,6 +57,7 @@ class AcademicAuditController extends Controller
                 return [
                     'id' => $assignment->id,
                     'course_code' => $assignment->course?->code,
+                    'cohort_code' => $assignment->course?->cohort?->code,
                     'title' => $assignment->title,
                     'teacher_name' => $assignment->teacher?->name,
                     'due_date' => $assignment->due_at?->toDateString(),

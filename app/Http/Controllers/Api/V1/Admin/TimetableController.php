@@ -18,7 +18,11 @@ class TimetableController extends Controller
     public function index(Request $request): JsonResponse
     {
         $slots = Timetable::query()
-            ->with(['course', 'teacher'])
+            ->with(['course.cohort', 'teacher'])
+            // Strict filtering by active operating cohort
+            ->when($request->integer('cohort_id'), function ($q, $cohortId) {
+                $q->whereHas('course', fn ($c) => $c->where('cohort_id', $cohortId));
+            })
             ->when($request->integer('course_id'), fn ($q, $id) => $q->where('course_id', $id))
             ->when($request->integer('teacher_id'), fn ($q, $id) => $q->where('teacher_id', $id))
             ->orderBy('day_of_week')
@@ -36,7 +40,18 @@ class TimetableController extends Controller
 
         $slot = Timetable::query()->create($data);
 
-        return ApiResponse::success($slot->load(['course', 'teacher']), 'Timetable slot created.', 201);
+        return ApiResponse::success(
+            $slot->load(['course.cohort', 'teacher']),
+            'Timetable slot created.',
+            201
+        );
+    }
+
+    public function show(Timetable $timetable): JsonResponse
+    {
+        return ApiResponse::success(
+            $timetable->load(['course.cohort', 'teacher'])
+        );
     }
 
     public function update(Request $request, Timetable $timetable): JsonResponse
@@ -49,7 +64,10 @@ class TimetableController extends Controller
 
         $timetable->update($data);
 
-        return ApiResponse::success($timetable->fresh(['course', 'teacher']), 'Timetable slot updated.');
+        return ApiResponse::success(
+            $timetable->fresh(['course.cohort', 'teacher']),
+            'Timetable slot updated.'
+        );
     }
 
     public function updateMeetingLink(Request $request, Timetable $timetable): JsonResponse
@@ -60,7 +78,10 @@ class TimetableController extends Controller
 
         $timetable->update($data);
 
-        return ApiResponse::success($timetable->fresh(), 'Meeting link updated.');
+        return ApiResponse::success(
+            $timetable->fresh(['course.cohort', 'teacher']),
+            'Meeting link updated.'
+        );
     }
 
     public function destroy(Timetable $timetable): JsonResponse
@@ -82,6 +103,7 @@ class TimetableController extends Controller
             'end_time' => [$required, 'date_format:H:i', 'after:start_time'],
             'classroom' => ['nullable', 'string', 'max:128'],
             'delivery_mode' => ['sometimes', Rule::enum(DeliveryMode::class)],
+            'virtual_platform' => ['nullable', 'string', 'in:zoom,google_meet,teams,other'],
             'meeting_link' => ['nullable', 'url', 'max:2048'],
             'meeting_opens_minutes_before' => ['sometimes', 'integer', 'min:0', 'max:120'],
         ]);
@@ -90,6 +112,10 @@ class TimetableController extends Controller
     private function assertTeacher(int $teacherId): void
     {
         $teacher = User::query()->with('role')->findOrFail($teacherId);
-        abort_unless($teacher->hasRole(RoleSlug::Teacher->value), 422, 'Assigned user must be a lecturer.');
+        abort_unless(
+            $teacher->hasRole(RoleSlug::Teacher->value) || $teacher->isTeacher(),
+            422,
+            'Assigned user must be a lecturer.'
+        );
     }
 }

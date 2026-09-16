@@ -191,7 +191,7 @@ export const StudentLogin = () => {
           <div className="space-y-2 text-center">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-semibold">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Vacation Term Access</span>
+              <span>Access Your Student Portalphp artisan test</span>
             </div>
             <h1 className="text-2xl font-black tracking-tight text-white">Student Portal Login</h1>
             <p className="text-xs text-slate-400 leading-relaxed max-w-sm mx-auto">

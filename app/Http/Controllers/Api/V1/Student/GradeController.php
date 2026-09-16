@@ -80,6 +80,7 @@ class GradeController extends Controller
                 'title' => $course->title,
                 'code' => $course->code,
                 'teacher_name' => $teacherName,
+                'score' => $percentage,
                 'percent' => $percentage,
                 'gpa_points' => $gpaPoints,
                 'grade' => $percentage !== null ? "{$percentage}%" : 'Pending',

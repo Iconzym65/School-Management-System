@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\Admin\AcademicAuditController;
 use App\Http\Controllers\Api\V1\Admin\AttendanceOverrideController;
 use App\Http\Controllers\Api\V1\Admin\CohortController;
 use App\Http\Controllers\Api\V1\Admin\CourseController as AdminCourseController;
@@ -139,6 +140,8 @@ Route::prefix('v1')->group(function () {
                 return ApiResponse::success($logs);
             });
 
+            Route::get('attendance-logs', [AcademicAuditController::class, 'attendance']);
+            Route::get('assignment-audits', [AcademicAuditController::class, 'assignments']);
             Route::get('settings', [SettingController::class, 'index']);
             Route::put('settings', [SettingController::class, 'update']);
         });
@@ -169,12 +172,12 @@ Route::prefix('v1')->group(function () {
         });
 
         // 3. Student Endpoints
-        Route::prefix('student')->middleware('role:student')->group(function () {
+        Route::prefix('student')->middleware(['role:student', 'student.active'])->group(function () {
             Route::get('dashboard', [StudentDashboardController::class, 'show']);
             Route::get('profile', [StudentProfileController::class, 'show']);
             Route::get('courses', [StudentCourseController::class, 'index']);
             Route::get('timetable', [StudentTimetableController::class, 'index']);
-            Route::get('timetables/{timetable}/join', [StudentTimetableController::class, 'join'])->middleware('student.active');
+            Route::get('timetables/{timetable}/join', [StudentTimetableController::class, 'join']);
 
             Route::get('assignments', [StudentAssignmentController::class, 'index']);
             Route::get('assignments/{assignment}/download', [StudentAssignmentController::class, 'downloadAttachment']);

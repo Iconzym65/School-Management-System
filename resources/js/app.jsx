@@ -36,7 +36,14 @@ import {
   FileText,
   Bell,
   ChevronRight,
-  Filter
+  Filter,
+  ArrowLeft,
+  Home,
+  Save,
+  BookCheck,
+  School,
+  MapPin,
+  HeartHandshake
 } from 'lucide-react';
 import { validatePortalAccess, clearAuth } from './utils/auth';
 
@@ -151,15 +158,39 @@ export const AdminPortalDashboard = () => {
     }
   };
 
-  // Navigation & UI States
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [adminDropdownOpen, setAdminDropdownOpen] = useState(false);
+  // Navigation History Stack for Back Navigation
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [navHistory, setNavHistory] = useState(['dashboard']);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [adminDropdownOpen, setAdminDropdownOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
   const dropdownRef = useRef(null);
+
+  const navigateToTab = (nextTab) => {
+    if (nextTab === activeTab) return;
+    setNavHistory((prev) => [...prev, nextTab]);
+    setActiveTab(nextTab);
+    if (nextTab !== 'student-detail') {
+      setSelectedStudent(null);
+      setIsEditingDossier(false);
+    }
+  };
+
+  const handleGoBack = () => {
+    if (navHistory.length > 1) {
+      const historyCopy = [...navHistory];
+      historyCopy.pop(); // Remove current screen
+      const prevTab = historyCopy[historyCopy.length - 1];
+      setNavHistory(historyCopy);
+      setActiveTab(prevTab);
+      if (prevTab !== 'student-detail') {
+        setSelectedStudent(null);
+        setIsEditingDossier(false);
+      }
+    }
+  };
 
   // Global System-Wide Batch Filter Key
   const [globalCohortId, setGlobalCohortId] = useState(
@@ -174,9 +205,13 @@ export const AdminPortalDashboard = () => {
   const [courses, setCourses] = useState([]);
   const [timetables, setTimetables] = useState([]);
   const [attendanceLogs, setAttendanceLogs] = useState([]);
-  const [assignmentAudits, setAssignmentAudits] = useState([]);
   const [studentApplications, setStudentApplications] = useState([]);
   const [settings, setSettings] = useState({ attendance_edit_window_hours: 24, meeting_link_opens_minutes_before: 15 });
+
+  // Detailed Student Profile & Dossier States
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [studentProfileData, setStudentProfileData] = useState(null);
+  const [isEditingDossier, setIsEditingDossier] = useState(false);
 
   // Modals State
   const [showCohortModal, setShowCohortModal] = useState(false);
@@ -198,9 +233,17 @@ export const AdminPortalDashboard = () => {
   // Forms State
   const [cohortForm, setCohortForm] = useState({ name: '', code: '', starts_on: '', ends_on: '', is_active: true });
   const [assignForm, setAssignForm] = useState({ student_id: '', cohort_id: '' });
-  const [teacherForm, setTeacherForm] = useState({ id: 0, name: '', email: '', phone: '', employee_id: '', course_id: '' });
+  const [teacherForm, setTeacherForm] = useState({ id: 0, name: '', email: '', phone: '', employee_id: '' });
   const [isEditingTeacher, setIsEditingTeacher] = useState(false);
-  const [studentForm, setStudentForm] = useState({ id: 0, name: '', email: '', phone: '', cohort_id: '', status: 'ACTIVE', course_ids: [] });
+  const [studentForm, setStudentForm] = useState({
+    id: 0,
+    name: '',
+    email: '',
+    phone: '',
+    cohort_id: '',
+    status: 'ACTIVE',
+    course_ids: []
+  });
   const [isEditingStudent, setIsEditingStudent] = useState(false);
   const [courseForm, setCourseForm] = useState({ id: 0, code: '', title: '', credit_hours: 3, description: '', cohort_id: '', teacher_id: '' });
   const [isEditingCourse, setIsEditingCourse] = useState(false);
@@ -218,7 +261,7 @@ export const AdminPortalDashboard = () => {
   });
   const [isEditingTimetable, setIsEditingTimetable] = useState(false);
 
-  // Profile Form
+  // Admin Profile Form
   const [profileForm, setProfileForm] = useState({
     name: '',
     email: '',
@@ -314,14 +357,9 @@ export const AdminPortalDashboard = () => {
     });
   }, [students, studentSearch, studentStatusFilter]);
 
-  // Clean Administrator Greeting Name
   const cleanAdminName = useMemo(() => {
     if (!adminUser?.name) return 'Admin';
     const parts = adminUser.name.trim().split(/\s+/);
-    const honorifics = ['mr.', 'mrs.', 'ms.', 'dr.', 'prof.', 'rev.', 'mr', 'mrs', 'ms', 'dr', 'prof'];
-    if (honorifics.includes(parts[0].toLowerCase()) && parts.length > 1) {
-      return `${parts[0]} ${parts[1]}`;
-    }
     return parts[0];
   }, [adminUser]);
 
@@ -341,7 +379,135 @@ export const AdminPortalDashboard = () => {
     });
   }, []);
 
-  // Handlers
+  // Detailed Student Dossier Loader
+  const handleOpenStudentProfile = async (student) => {
+    setIsLoading(true);
+    try {
+      const res = await apiFetch(`/admin/students/${student.id}`);
+      const raw = res.student || res.data || res;
+      const app = res.application || {};
+      const enrolled = res.enrolled_course_ids || (raw.enrollments || []).map((e) => e.course_id || e.course?.id).filter(Boolean);
+
+      setSelectedStudent(raw);
+      setStudentProfileData({
+        id: raw.id,
+        name: raw.name || `${app.first_name || ''} ${app.last_name || ''}`.trim(),
+        email: raw.email || app.student_email || '',
+        phone: raw.phone || app.student_phone || '',
+        student_number: raw.student_number || app.student_id_reference || '',
+        status: raw.status || 'ACTIVE',
+        cohort_id: raw.cohort_id || '',
+
+        // Detailed Application Identity
+        first_name: app.first_name || '',
+        middle_name: app.middle_name || '',
+        last_name: app.last_name || '',
+        gender: app.gender || '',
+        dob: app.dob || '',
+        residential_address: app.residential_address || '',
+        city: app.city || '',
+        previous_institution: app.previous_institution || '',
+        current_level: app.current_level || '',
+        stream_track: app.stream_track || '',
+        student_id_reference: app.student_id_reference || '',
+
+        // Guardian Information
+        guardian_name: app.guardian_name || '',
+        guardian_relationship: app.guardian_relationship || '',
+        guardian_email: app.guardian_email || '',
+        guardian_phone: app.guardian_phone || '',
+        guardian_whatsapp: app.guardian_whatsapp || '',
+
+        // Course enrollments
+        course_ids: enrolled || [],
+      });
+      setIsEditingDossier(false);
+      navigateToTab('student-detail');
+    } catch (err) {
+      showToastNotification(err.message || 'Failed to retrieve student profile.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Detailed Student Dossier Saver
+  const handleSaveStudentProfile = async (e) => {
+    if (e) e.preventDefault();
+    if (!studentProfileData) return;
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        name: studentProfileData.name,
+        email: studentProfileData.email,
+        phone: studentProfileData.phone,
+        student_number: studentProfileData.student_number,
+        status: studentProfileData.status,
+        cohort_id: studentProfileData.cohort_id ? parseInt(studentProfileData.cohort_id, 10) : null,
+
+        first_name: studentProfileData.first_name,
+        middle_name: studentProfileData.middle_name,
+        last_name: studentProfileData.last_name,
+        gender: studentProfileData.gender,
+        dob: studentProfileData.dob,
+        residential_address: studentProfileData.residential_address,
+        city: studentProfileData.city,
+        previous_institution: studentProfileData.previous_institution,
+        current_level: studentProfileData.current_level,
+        stream_track: studentProfileData.stream_track,
+        student_id_reference: studentProfileData.student_id_reference,
+
+        guardian_name: studentProfileData.guardian_name,
+        guardian_relationship: studentProfileData.guardian_relationship,
+        guardian_email: studentProfileData.guardian_email,
+        guardian_phone: studentProfileData.guardian_phone,
+        guardian_whatsapp: studentProfileData.guardian_whatsapp,
+
+        course_ids: (studentProfileData.course_ids || []).map((id) => parseInt(id, 10)),
+      };
+
+      await apiFetch(`/admin/students/${studentProfileData.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+
+      showToastNotification('Student record updated successfully!', 'success');
+      setIsEditingDossier(false);
+      await loadAllData();
+    } catch (err) {
+      showToastNotification(err.message || 'Failed to update student profile.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleToggleCourseAssignment = (courseId) => {
+    setStudentProfileData((prev) => {
+      const exists = prev.course_ids.includes(courseId);
+      const nextCourses = exists
+        ? prev.course_ids.filter((id) => id !== courseId)
+        : [...prev.course_ids, courseId];
+      return { ...prev, course_ids: nextCourses };
+    });
+  };
+
+  const handleToggleStudentStatus = async (student) => {
+    const nextStatus = student.status === 'ACTIVE' ? 'INACTIVE_PAYMENT_PENDING' : 'ACTIVE';
+    try {
+      await apiFetch(`/admin/students/${student.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      showToastNotification(`Student access set to ${nextStatus === 'ACTIVE' ? 'Active' : 'Gated'}`, 'success');
+      await loadAllData();
+      if (selectedStudent && selectedStudent.id === student.id) {
+        setStudentProfileData((p) => ({ ...p, status: nextStatus }));
+      }
+    } catch (err) {
+      showToastNotification(err.message || 'Failed to update student status.', 'error');
+    }
+  };
+
+  // Handlers for Other Dashboard Entities
   const handleSaveProfile = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -455,7 +621,7 @@ export const AdminPortalDashboard = () => {
         showToastNotification('Teacher provisioned & credentials issued!', 'success');
       }
       setShowTeacherModal(false);
-      setTeacherForm({ id: 0, name: '', email: '', phone: '', employee_id: '', course_id: '' });
+      setTeacherForm({ id: 0, name: '', email: '', phone: '', employee_id: '' });
       await loadAllData();
     } catch (err) {
       showToastNotification(err.message || 'Failed to save teacher', 'error');
@@ -510,20 +676,6 @@ export const AdminPortalDashboard = () => {
       showToastNotification(err.message || 'Failed to save student', 'error');
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleToggleStudentStatus = async (student) => {
-    const nextStatus = student.status === 'ACTIVE' ? 'INACTIVE_PAYMENT_PENDING' : 'ACTIVE';
-    try {
-      await apiFetch(`/admin/students/${student.id}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: nextStatus }),
-      });
-      showToastNotification(`Student access updated to ${nextStatus === 'ACTIVE' ? 'Active (Paid)' : 'Gated (Unpaid)'}`, 'success');
-      await loadAllData();
-    } catch (err) {
-      showToastNotification(err.message || 'Failed to update student status', 'error');
     }
   };
 
@@ -655,6 +807,9 @@ export const AdminPortalDashboard = () => {
       await apiFetch(endpointMap[deleteTarget.type], { method: 'DELETE' });
       showToastNotification(`${deleteTarget.title} was removed successfully.`, 'success');
       setDeleteTarget(null);
+      if (activeTab === 'student-detail' && deleteTarget.type === 'student') {
+        handleGoBack();
+      }
       await loadAllData();
     } catch (err) {
       showToastNotification(err.message || `Failed to delete ${deleteTarget.type}`, 'error');
@@ -665,7 +820,6 @@ export const AdminPortalDashboard = () => {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0B1120] text-slate-800 dark:text-slate-100 flex font-sans antialiased transition-colors duration-200 selection:bg-blue-600 selection:text-white">
-      
       {/* Toast Alert */}
       {toast && (
         <div
@@ -692,7 +846,6 @@ export const AdminPortalDashboard = () => {
         }`}
       >
         <div>
-          {/* Logo & Brand Header */}
           <div className="h-20 flex items-center gap-3.5 px-5 border-b border-slate-800/80">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center font-black text-lg shadow-lg shadow-blue-500/20 shrink-0">
               A
@@ -705,14 +858,12 @@ export const AdminPortalDashboard = () => {
             )}
           </div>
 
-          {/* Section Heading */}
           {sidebarOpen && (
             <div className="px-5 pt-6 pb-2">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400/80">Navigation</span>
             </div>
           )}
 
-          {/* Navigation Links */}
           <nav className="p-3 space-y-1.5">
             {[
               { id: 'dashboard', label: 'Dashboard Overview', icon: LayoutDashboard },
@@ -727,11 +878,11 @@ export const AdminPortalDashboard = () => {
               { id: 'settings', label: 'System Presets', icon: Settings },
             ].map((item) => {
               const Icon = item.icon;
-              const isActive = activeTab === item.id;
+              const isActive = activeTab === item.id || (item.id === 'students' && activeTab === 'student-detail');
               return (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => navigateToTab(item.id)}
                   className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
                     isActive
                       ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
@@ -754,35 +905,6 @@ export const AdminPortalDashboard = () => {
           </nav>
         </div>
 
-        {/* Sidebar Footer Cards */}
-        <div className="p-4 space-y-3">
-          {sidebarOpen && (
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800/80 border border-slate-700/60 text-xs shadow-inner">
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span className="font-bold text-white text-[11px]">System Console</span>
-              </div>
-              <p className="text-[11px] text-slate-400 leading-relaxed mb-3">
-                Manage accounts, tuition clearance switches, and master schedules.
-              </p>
-              <button
-                onClick={() => setActiveTab('settings')}
-                className="text-[11px] font-bold text-blue-400 hover:text-blue-300 transition-colors inline-flex items-center gap-1 cursor-pointer"
-              >
-                <span>Console Configuration</span>
-                <ChevronRight className="w-3 h-3" />
-              </button>
-            </div>
-          )}
-
-          {sidebarOpen && (
-            <div className="px-2 pt-1">
-              <span className="text-[10px] text-slate-400/60 font-mono tracking-wider">Admin Desk • v2.4</span>
-            </div>
-          )}
-        </div>
-
-        {/* Sidebar Collapse Toggle Button */}
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
           className="absolute -right-3.5 top-24 w-7 h-7 rounded-full bg-white dark:bg-slate-800 border-2 border-blue-600 dark:border-blue-500 text-blue-600 dark:text-blue-400 flex items-center justify-center shadow-md cursor-pointer hover:scale-110 transition-transform hidden md:flex"
@@ -794,8 +916,7 @@ export const AdminPortalDashboard = () => {
 
       {/* ======================= MAIN CONTENT FRAME ======================= */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        
-        {/* Dynamic Collapsible Top Header */}
+        {/* Dynamic Top Header */}
         <header
           className={`sticky top-0 z-40 transition-all duration-300 ease-in-out border-b px-6 sm:px-8 flex items-center justify-between shrink-0 ${
             isScrolled
@@ -803,8 +924,17 @@ export const AdminPortalDashboard = () => {
               : 'h-20 bg-white dark:bg-[#0F172A] border-slate-200/80 dark:border-slate-800'
           }`}
         >
-          {/* Left Session & System-Wide Batch Filter Dropdown */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {navHistory.length > 1 && (
+              <button
+                onClick={handleGoBack}
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+                title="Return to previous screen"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            )}
+
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white md:hidden cursor-pointer"
@@ -827,7 +957,6 @@ export const AdminPortalDashboard = () => {
 
               <div className="h-8 w-px bg-slate-200 dark:bg-slate-800 hidden lg:block"></div>
 
-              {/* Dynamic Global Batch Filter Dropdown */}
               <div className="relative">
                 <select
                   value={globalCohortId}
@@ -855,40 +984,22 @@ export const AdminPortalDashboard = () => {
             </div>
           </div>
 
-          {/* Right Header Utilities & Profile */}
           <div className="flex items-center gap-3">
-            
-            {/* Dark / Light Toggle */}
             <button
               onClick={toggleDarkMode}
-              className={`rounded-xl border border-slate-200/80 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-600 dark:text-slate-300 transition-all cursor-pointer ${
-                isScrolled ? 'p-2' : 'p-2.5'
-              }`}
+              className="p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-600 dark:text-slate-300 transition-all cursor-pointer"
               title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
               {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
             </button>
 
-            {/* Sync Refresh */}
             <button
               onClick={loadAllData}
               disabled={isLoading}
-              className={`rounded-xl border border-slate-200/80 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-600 dark:text-slate-300 transition-all cursor-pointer disabled:opacity-50 ${
-                isScrolled ? 'p-2' : 'p-2.5'
-              }`}
+              className="p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-600 dark:text-slate-300 transition-all cursor-pointer disabled:opacity-50"
               title="Refresh Data"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-blue-500' : ''}`} />
-            </button>
-
-            {/* Notification Bell */}
-            <button className={`rounded-xl border border-slate-200/80 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/80 text-slate-600 dark:text-slate-300 transition-all cursor-pointer relative ${
-              isScrolled ? 'p-2' : 'p-2.5'
-            }`}>
-              <Bell className="w-4 h-4" />
-              {studentApplications.length > 0 && (
-                <span className="w-2 h-2 rounded-full bg-rose-500 absolute top-2 right-2"></span>
-              )}
             </button>
 
             {/* Profile Dropdown */}
@@ -904,9 +1015,7 @@ export const AdminPortalDashboard = () => {
                   <p className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
                     {adminUser?.name || 'Administrator'}
                   </p>
-                  <p className="text-[11px] text-slate-400 font-medium">
-                    Super Admin
-                  </p>
+                  <p className="text-[11px] text-slate-400 font-medium">Super Admin</p>
                 </div>
                 <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${adminDropdownOpen ? 'rotate-180' : ''}`} />
               </button>
@@ -916,36 +1025,26 @@ export const AdminPortalDashboard = () => {
                   <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
                     <p className="font-bold text-slate-900 dark:text-white truncate">{adminUser?.name}</p>
                     <p className="text-[11px] font-mono text-slate-400 truncate mt-0.5">{adminUser?.email}</p>
-                    <div className="mt-2">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
-                        Super Administrator
-                      </span>
-                    </div>
                   </div>
-
                   <div className="py-1">
                     <button
-                      onClick={() => { setActiveTab('profile'); setAdminDropdownOpen(false); }}
+                      onClick={() => { navigateToTab('profile'); setAdminDropdownOpen(false); }}
                       className="w-full px-4 py-2.5 text-left text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/70 flex items-center gap-2.5 cursor-pointer font-medium"
                     >
                       <User className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                       <span>My Profile & Security</span>
                     </button>
                     <button
-                      onClick={() => { setActiveTab('settings'); setAdminDropdownOpen(false); }}
+                      onClick={() => { navigateToTab('settings'); setAdminDropdownOpen(false); }}
                       className="w-full px-4 py-2.5 text-left text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/70 flex items-center gap-2.5 cursor-pointer font-medium"
                     >
                       <Settings className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                       <span>Console Settings</span>
                     </button>
                   </div>
-
                   <div className="pt-1 border-t border-slate-100 dark:border-slate-800">
                     <button
-                      onClick={() => {
-                        clearAuth();
-                        window.location.replace('/login');
-                      }}
+                      onClick={() => { clearAuth(); window.location.replace('/login'); }}
                       className="w-full px-4 py-2.5 text-left font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center gap-2.5 cursor-pointer"
                     >
                       <LogOut className="w-4 h-4 text-rose-500" />
@@ -958,17 +1057,644 @@ export const AdminPortalDashboard = () => {
           </div>
         </header>
 
-        {/* Viewport Content with Scroll Listener */}
-        <main
-          onScroll={handleScroll}
-          className="flex-1 overflow-y-auto p-6 sm:p-8 lg:p-10 space-y-8 scroll-smooth"
-        >
-          
-          {/* ==================== TAB 1: DASHBOARD ==================== */}
+        {/* Viewport Content */}
+        <main onScroll={handleScroll} className="flex-1 overflow-y-auto p-6 sm:p-8 lg:p-10 space-y-8 scroll-smooth">
+
+          {/* ==================== TAB: STUDENT COMPREHENSIVE DOSSIER ==================== */}
+          {activeTab === 'student-detail' && studentProfileData && (
+            <div className="space-y-6 max-w-6xl mx-auto animate-in fade-in duration-200">
+              {/* Context Toolbar */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={handleGoBack}
+                  className="flex items-center gap-2 text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-500 cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Return to Previous Screen</span>
+                </button>
+
+                <div className="flex items-center gap-3">
+                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase border ${
+                    studentProfileData.status === 'ACTIVE'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                      : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800'
+                  }`}>
+                    {studentProfileData.status === 'ACTIVE' ? 'Tuition Cleared' : 'Payment Pending'}
+                  </span>
+
+                  {!isEditingDossier ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingDossier(true)}
+                      className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>Edit Student Profile</span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingDossier(false)}
+                        className="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        form="student-dossier-form"
+                        disabled={isSubmitting}
+                        className="px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>{isSubmitting ? 'Saving...' : 'Save Updates'}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Identity Banner */}
+              <div className="p-6 rounded-3xl bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 shadow-xs flex items-center justify-between gap-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center font-black text-xl shadow-md shadow-blue-500/20 shrink-0">
+                    {studentProfileData.name ? studentProfileData.name.slice(0, 2).toUpperCase() : 'ST'}
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900 dark:text-white leading-tight">
+                      {studentProfileData.name}
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-400 mt-1 font-medium">
+                      <span className="font-mono font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
+                        {studentProfileData.student_number || 'STU-Auto'}
+                      </span>
+                      <span>•</span>
+                      <span>{studentProfileData.email}</span>
+                      <span>•</span>
+                      <span>{studentProfileData.phone || 'No phone registered'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="hidden sm:block text-right">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Mode</span>
+                  <p className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                    {isEditingDossier ? 'Editing Record' : 'Read-Only Record'}
+                  </p>
+                </div>
+              </div>
+
+              {/* ================= MODE 1: READ-ONLY VIEW ================= */}
+              {!isEditingDossier ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-xs">
+                  <div className="lg:col-span-2 space-y-6">
+                    {/* Identification & Bio Card */}
+                    <div className="p-6 rounded-3xl bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+                      <h4 className="font-bold text-slate-900 dark:text-white text-sm border-b pb-3 border-slate-100 dark:border-slate-800 flex items-center gap-2">
+                        <User className="w-4 h-4 text-blue-500" />
+                        <span>Student Identification & Bio</span>
+                      </h4>
+                      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-y-3.5 gap-x-6">
+                        <div>
+                          <dt className="text-[11px] font-bold text-slate-400 uppercase">First Name</dt>
+                          <dd className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{studentProfileData.first_name || 'N/A'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[11px] font-bold text-slate-400 uppercase">Middle Name</dt>
+                          <dd className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{studentProfileData.middle_name || 'N/A'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[11px] font-bold text-slate-400 uppercase">Last Name</dt>
+                          <dd className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{studentProfileData.last_name || 'N/A'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[11px] font-bold text-slate-400 uppercase">Gender</dt>
+                          <dd className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{studentProfileData.gender || 'N/A'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[11px] font-bold text-slate-400 uppercase">Date of Birth</dt>
+                          <dd className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{studentProfileData.dob || 'N/A'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[11px] font-bold text-slate-400 uppercase">Vacation Batch</dt>
+                          <dd className="font-bold text-purple-600 dark:text-purple-400 mt-0.5">
+                            {cohorts.find((c) => Number(c.id) === Number(studentProfileData.cohort_id))?.name || 'Unassigned'}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+
+                    {/* Location & Academic Track */}
+                    <div className="p-6 rounded-3xl bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+                      <h4 className="font-bold text-slate-900 dark:text-white text-sm border-b pb-3 border-slate-100 dark:border-slate-800 flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-emerald-500" />
+                        <span>Location & High School Track</span>
+                      </h4>
+                      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-y-3.5 gap-x-6">
+                        <div className="sm:col-span-2">
+                          <dt className="text-[11px] font-bold text-slate-400 uppercase">Residential Address</dt>
+                          <dd className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{studentProfileData.residential_address || 'No address provided'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[11px] font-bold text-slate-400 uppercase">City / Suburb</dt>
+                          <dd className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{studentProfileData.city || 'N/A'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[11px] font-bold text-slate-400 uppercase">Base / Prior Institution</dt>
+                          <dd className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{studentProfileData.previous_institution || 'N/A'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[11px] font-bold text-slate-400 uppercase">Current Academic Level</dt>
+                          <dd className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{studentProfileData.current_level || 'N/A'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[11px] font-bold text-slate-400 uppercase">Academic Stream / Track</dt>
+                          <dd className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{studentProfileData.stream_track || 'N/A'}</dd>
+                        </div>
+                      </dl>
+                    </div>
+
+                    {/* Guardian & Emergency Contacts */}
+                    <div className="p-6 rounded-3xl bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+                      <h4 className="font-bold text-slate-900 dark:text-white text-sm border-b pb-3 border-slate-100 dark:border-slate-800 flex items-center gap-2">
+                        <HeartHandshake className="w-4 h-4 text-amber-500" />
+                        <span>Guardian & Emergency Contacts</span>
+                      </h4>
+                      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-y-3.5 gap-x-6">
+                        <div>
+                          <dt className="text-[11px] font-bold text-slate-400 uppercase">Guardian Name</dt>
+                          <dd className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{studentProfileData.guardian_name || 'N/A'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[11px] font-bold text-slate-400 uppercase">Relationship</dt>
+                          <dd className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{studentProfileData.guardian_relationship || 'N/A'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[11px] font-bold text-slate-400 uppercase">Guardian Phone</dt>
+                          <dd className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{studentProfileData.guardian_phone || 'N/A'}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[11px] font-bold text-slate-400 uppercase">Guardian WhatsApp</dt>
+                          <dd className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{studentProfileData.guardian_whatsapp || 'N/A'}</dd>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <dt className="text-[11px] font-bold text-slate-400 uppercase">Guardian Email</dt>
+                          <dd className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{studentProfileData.guardian_email || 'N/A'}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                  </div>
+
+                  {/* Assigned Subjects Summary */}
+                  <div className="p-6 rounded-3xl bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+                    <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+                      <div className="flex items-center gap-2">
+                        <BookCheck className="w-4 h-4 text-purple-500" />
+                        <h4 className="font-bold text-slate-900 dark:text-white text-sm">Assigned Curriculum</h4>
+                      </div>
+                      <span className="text-[10px] font-mono font-bold bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-full">
+                        {studentProfileData.course_ids.length} Subjects
+                      </span>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {courses.filter((c) => studentProfileData.course_ids.includes(c.id)).map((course) => (
+                        <div key={course.id} className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                          <div>
+                            <p className="font-bold text-slate-900 dark:text-white text-xs">{course.title}</p>
+                            <p className="text-[10px] font-mono text-slate-400 mt-0.5">{course.code} • {course.credit_hours || 3} Credits</p>
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-400">{course.teacher?.name || 'Tutor'}</span>
+                        </div>
+                      ))}
+                      {studentProfileData.course_ids.length === 0 && (
+                        <p className="text-slate-400 text-center italic py-8">No curriculum courses currently assigned.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+
+                /* ================= MODE 2: EDITABLE DOSSIER ================= */
+                <form id="student-dossier-form" onSubmit={handleSaveStudentProfile} className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-xs">
+                  <div className="lg:col-span-2 space-y-6">
+                    {/* Identity Inputs */}
+                    <div className="p-6 rounded-3xl bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 space-y-4 shadow-xs">
+                      <h4 className="font-bold text-slate-900 dark:text-white text-sm border-b pb-3 border-slate-100 dark:border-slate-800 flex items-center gap-2">
+                        <User className="w-4 h-4 text-blue-500" />
+                        <span>Edit Identification</span>
+                      </h4>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">First Name</label>
+                          <input
+                            type="text"
+                            value={studentProfileData.first_name}
+                            onChange={(e) => setStudentProfileData({ ...studentProfileData, first_name: e.target.value })}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Middle Name</label>
+                          <input
+                            type="text"
+                            value={studentProfileData.middle_name}
+                            onChange={(e) => setStudentProfileData({ ...studentProfileData, middle_name: e.target.value })}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Last Name</label>
+                          <input
+                            type="text"
+                            value={studentProfileData.last_name}
+                            onChange={(e) => setStudentProfileData({ ...studentProfileData, last_name: e.target.value })}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Gender</label>
+                          <select
+                            value={studentProfileData.gender}
+                            onChange={(e) => setStudentProfileData({ ...studentProfileData, gender: e.target.value })}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white font-bold outline-none"
+                          >
+                            <option value="">Select gender...</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Date of Birth</label>
+                          <input
+                            type="date"
+                            value={studentProfileData.dob}
+                            onChange={(e) => setStudentProfileData({ ...studentProfileData, dob: e.target.value })}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Student Phone</label>
+                          <input
+                            type="text"
+                            value={studentProfileData.phone}
+                            onChange={(e) => setStudentProfileData({ ...studentProfileData, phone: e.target.value })}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white outline-none"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-2">
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Login Email</label>
+                          <input
+                            type="email"
+                            required
+                            value={studentProfileData.email}
+                            onChange={(e) => setStudentProfileData({ ...studentProfileData, email: e.target.value })}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Vacation Batch</label>
+                          <select
+                            value={studentProfileData.cohort_id}
+                            onChange={(e) => setStudentProfileData({ ...studentProfileData, cohort_id: e.target.value })}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white font-bold outline-none"
+                          >
+                            <option value="">-- Select Batch --</option>
+                            {cohorts.map((c) => (
+                              <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Location & Academic Track Inputs */}
+                    <div className="p-6 rounded-3xl bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 space-y-4 shadow-xs">
+                      <h4 className="font-bold text-slate-900 dark:text-white text-sm border-b pb-3 border-slate-100 dark:border-slate-800 flex items-center gap-2">
+                        <School className="w-4 h-4 text-emerald-500" />
+                        <span>Edit Location & Academic History</span>
+                      </h4>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="sm:col-span-2">
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Residential Address</label>
+                          <input
+                            type="text"
+                            value={studentProfileData.residential_address}
+                            onChange={(e) => setStudentProfileData({ ...studentProfileData, residential_address: e.target.value })}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">City / Suburb</label>
+                          <input
+                            type="text"
+                            value={studentProfileData.city}
+                            onChange={(e) => setStudentProfileData({ ...studentProfileData, city: e.target.value })}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Previous / Base School</label>
+                          <input
+                            type="text"
+                            value={studentProfileData.previous_institution}
+                            onChange={(e) => setStudentProfileData({ ...studentProfileData, previous_institution: e.target.value })}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Academic Level</label>
+                          <input
+                            type="text"
+                            value={studentProfileData.current_level}
+                            onChange={(e) => setStudentProfileData({ ...studentProfileData, current_level: e.target.value })}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Stream / Track</label>
+                          <input
+                            type="text"
+                            value={studentProfileData.stream_track}
+                            onChange={(e) => setStudentProfileData({ ...studentProfileData, stream_track: e.target.value })}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Guardian Inputs */}
+                    <div className="p-6 rounded-3xl bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 space-y-4 shadow-xs">
+                      <h4 className="font-bold text-slate-900 dark:text-white text-sm border-b pb-3 border-slate-100 dark:border-slate-800 flex items-center gap-2">
+                        <HeartHandshake className="w-4 h-4 text-amber-500" />
+                        <span>Edit Guardian Contacts</span>
+                      </h4>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Guardian Name</label>
+                          <input
+                            type="text"
+                            value={studentProfileData.guardian_name}
+                            onChange={(e) => setStudentProfileData({ ...studentProfileData, guardian_name: e.target.value })}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Relationship</label>
+                          <input
+                            type="text"
+                            value={studentProfileData.guardian_relationship}
+                            onChange={(e) => setStudentProfileData({ ...studentProfileData, guardian_relationship: e.target.value })}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Guardian Phone</label>
+                          <input
+                            type="text"
+                            value={studentProfileData.guardian_phone}
+                            onChange={(e) => setStudentProfileData({ ...studentProfileData, guardian_phone: e.target.value })}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Guardian WhatsApp</label>
+                          <input
+                            type="text"
+                            value={studentProfileData.guardian_whatsapp}
+                            onChange={(e) => setStudentProfileData({ ...studentProfileData, guardian_whatsapp: e.target.value })}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white outline-none"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Guardian Email</label>
+                          <input
+                            type="email"
+                            value={studentProfileData.guardian_email}
+                            onChange={(e) => setStudentProfileData({ ...studentProfileData, guardian_email: e.target.value })}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-white outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Subject Assignment Checklist */}
+                  <div className="p-6 rounded-3xl bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between space-y-4 shadow-xs">
+                    <div>
+                      <div className="flex items-center justify-between border-b pb-3 border-slate-100 dark:border-slate-800">
+                        <div className="flex items-center gap-2">
+                          <BookCheck className="w-4 h-4 text-purple-500" />
+                          <h4 className="font-bold text-slate-900 dark:text-white text-sm">Assign Subjects</h4>
+                        </div>
+                        <span className="text-[10px] font-mono font-bold bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2.5 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
+                          {studentProfileData.course_ids.length} Selected
+                        </span>
+                      </div>
+
+                      <div className="mt-4 space-y-2 max-h-[480px] overflow-y-auto pr-1">
+                        {courses.map((course) => {
+                          const isAssigned = studentProfileData.course_ids.includes(course.id);
+                          return (
+                            <div
+                              key={course.id}
+                              onClick={() => handleToggleCourseAssignment(course.id)}
+                              className={`p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                                isAssigned
+                                  ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-300 dark:border-blue-800 text-blue-950 dark:text-blue-100'
+                                  : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="checkbox"
+                                  checked={isAssigned}
+                                  onChange={() => {}}
+                                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 pointer-events-none"
+                                />
+                                <div>
+                                  <p className="font-bold leading-tight text-xs">{course.title}</p>
+                                  <p className="text-[10px] font-mono text-slate-400 mt-0.5">{course.code} • {course.credit_hours || 3} Credits</p>
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-400 truncate max-w-[80px]">
+                                {course.teacher?.name ? course.teacher.name.split(' ')[0] : 'Tutor'}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const allIds = courses.map((c) => c.id);
+                          setStudentProfileData({ ...studentProfileData, course_ids: allIds });
+                        }}
+                        className="w-full py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-[11px] cursor-pointer"
+                      >
+                        Assign All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStudentProfileData({ ...studentProfileData, course_ids: [] })}
+                        className="w-full py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-[11px] text-slate-400 cursor-pointer"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+
+          {/* ==================== TAB 2: STUDENTS DIRECTORY (CLEAN HCI) ==================== */}
+          {activeTab === 'students' && (
+            <section className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xs max-w-[1400px] mx-auto">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">SHS Students Directory</h2>
+                  <p className="text-xs text-slate-400">Select any student to view their admission profile or update subject assignments.</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setIsEditingStudent(false);
+                    setStudentForm({ id: 0, name: '', email: '', phone: '', cohort_id: globalCohortId || cohorts[0]?.id || '', status: 'ACTIVE', course_ids: [] });
+                    setShowStudentModal(true);
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md shadow-blue-600/20 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Enroll Student</span>
+                </button>
+              </div>
+
+              {/* Search & Filter */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="relative sm:col-span-2">
+                  <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by student name, email, or index number..."
+                    value={studentSearch}
+                    onChange={(e) => setStudentSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <select
+                    value={studentStatusFilter}
+                    onChange={(e) => setStudentStatusFilter(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                  >
+                    <option value="all">All Students ({students.length})</option>
+                    <option value="ACTIVE">Active (Tuition Paid) ({activeStudentsCount})</option>
+                    <option value="INACTIVE_PAYMENT_PENDING">Gated (Payment Pending) ({inactiveStudentsCount})</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Clean, Non-Congested Table */}
+              <div className="overflow-x-auto rounded-2xl border border-slate-200/80 dark:border-slate-800">
+                <table className="w-full text-left text-xs whitespace-nowrap">
+                  <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 uppercase font-bold text-[10px] border-b border-slate-200/80 dark:border-slate-800">
+                    <tr>
+                      <th className="py-3.5 px-4">Student</th>
+                      <th className="py-3.5 px-4">Vacation Batch</th>
+                      <th className="py-3.5 px-4">Enrolled Subjects</th>
+                      <th className="py-3.5 px-4">Tuition Status</th>
+                      <th className="py-3.5 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-medium">
+                    {filteredStudents.map((s) => {
+                      const isActive = s.status === 'ACTIVE';
+                      const studentCohort = cohorts.find((c) => Number(c.id) === Number(s.cohort_id));
+                      const enrolledCount = s.enrollments ? s.enrollments.length : 0;
+                      return (
+                        <tr
+                          key={s.id}
+                          onClick={() => handleOpenStudentProfile(s)}
+                          className="hover:bg-blue-50/40 dark:hover:bg-slate-800/30 cursor-pointer transition-colors"
+                        >
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 font-bold flex items-center justify-center text-xs shrink-0">
+                                {s.name ? s.name.slice(0, 2).toUpperCase() : 'ST'}
+                              </div>
+                              <div>
+                                <p className="font-bold text-slate-900 dark:text-white leading-tight">{s.name}</p>
+                                <p className="text-[11px] font-mono text-slate-400 mt-0.5">{s.student_number || 'STU-Auto'}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            {studentCohort ? (
+                              <span className="font-mono text-xs font-bold text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 px-2.5 py-0.5 rounded-full border border-purple-200 dark:border-purple-800">
+                                {studentCohort.code}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic">Unassigned</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span className="px-2.5 py-0.5 rounded-md font-bold text-[11px] bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 border border-slate-200 dark:border-slate-700">
+                              {enrolledCount} Subjects
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                                isActive ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800'
+                              }`}
+                            >
+                              {isActive ? 'Active' : 'Gated'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-right space-x-2" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => handleToggleStudentStatus(s)}
+                              className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                isActive ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-400 border border-amber-200 dark:border-amber-800' : 'bg-emerald-600 text-white hover:bg-emerald-500'
+                              }`}
+                            >
+                              {isActive ? 'Gate' : 'Clear'}
+                            </button>
+                            <button
+                              onClick={() => handleOpenStudentProfile(s)}
+                              className="px-3 py-1 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 text-xs font-bold cursor-pointer inline-flex items-center gap-1"
+                            >
+                              <span>Profile</span>
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setDeleteTarget({ type: 'student', id: s.id, title: `Student: ${s.name}` })}
+                              className="p-1.5 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-xl inline-block cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {/* ==================== TAB: DASHBOARD OVERVIEW ==================== */}
           {activeTab === 'dashboard' && (
             <div className="space-y-8 max-w-[1400px] mx-auto">
-              
-              {/* Header Greeting & Date Badge */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
@@ -976,7 +1702,7 @@ export const AdminPortalDashboard = () => {
                     <span className="inline-block animate-bounce origin-bottom-right">👋</span>
                   </h2>
                   <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">
-                    System Filter: <strong className="text-blue-600 dark:text-blue-400">{globalCohortId ? (cohorts.find(c => String(c.id) === String(globalCohortId))?.name || 'Selected Batch') : 'All Vacation Batches Active'}</strong>.
+                    Central administration workspace for SHS Vacation Classes.
                   </p>
                 </div>
 
@@ -988,13 +1714,11 @@ export const AdminPortalDashboard = () => {
                 </div>
               </div>
 
-              {/* 5 Reactive KPI Metric Cards */}
+              {/* 5 Reactive KPI Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
-                
-                {/* 1. Total Students */}
                 <div
-                  onClick={() => { setActiveTab('students'); setStudentStatusFilter('all'); }}
-                  className="bg-white dark:bg-[#0F172A] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between h-[155px] cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md transition-all group"
+                  onClick={() => { setStudentStatusFilter('all'); navigateToTab('students'); }}
+                  className="bg-white dark:bg-[#0F172A] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between h-[155px] cursor-pointer hover:border-blue-400 transition-all"
                 >
                   <div className="flex items-center justify-between">
                     <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
@@ -1003,42 +1727,30 @@ export const AdminPortalDashboard = () => {
                     <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400">Roster</span>
                   </div>
                   <div>
-                    <p className="text-3xl font-black text-slate-900 dark:text-white leading-none group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                      {students.length}
-                    </p>
-                    <p className="text-xs font-semibold text-slate-400 mt-1.5 flex items-center justify-between">
-                      <span>Total Students</span>
-                      <span className="opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                    </p>
+                    <p className="text-3xl font-black text-slate-900 dark:text-white leading-none">{students.length}</p>
+                    <p className="text-xs font-semibold text-slate-400 mt-1.5">Total Students</p>
                   </div>
                 </div>
 
-                {/* 2. Paid / Active Access */}
                 <div
-                  onClick={() => { setActiveTab('students'); setStudentStatusFilter('ACTIVE'); }}
-                  className="bg-white dark:bg-[#0F172A] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between h-[155px] cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-500 hover:shadow-md transition-all group"
+                  onClick={() => { setStudentStatusFilter('ACTIVE'); navigateToTab('students'); }}
+                  className="bg-white dark:bg-[#0F172A] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between h-[155px] cursor-pointer hover:border-emerald-400 transition-all"
                 >
                   <div className="flex items-center justify-between">
                     <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                       <ShieldCheck className="w-5 h-5" />
                     </div>
-                    <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">Verified</span>
+                    <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">Paid</span>
                   </div>
                   <div>
-                    <p className="text-3xl font-black text-emerald-600 dark:text-emerald-400 leading-none">
-                      {activeStudentsCount}
-                    </p>
-                    <p className="text-xs font-semibold text-slate-400 mt-1.5 flex items-center justify-between">
-                      <span>Tuition Cleared</span>
-                      <span className="opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                    </p>
+                    <p className="text-3xl font-black text-emerald-600 dark:text-emerald-400 leading-none">{activeStudentsCount}</p>
+                    <p className="text-xs font-semibold text-slate-400 mt-1.5">Tuition Cleared</p>
                   </div>
                 </div>
 
-                {/* 3. Unpaid / Access Gated */}
                 <div
-                  onClick={() => { setActiveTab('students'); setStudentStatusFilter('INACTIVE_PAYMENT_PENDING'); }}
-                  className="bg-white dark:bg-[#0F172A] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between h-[155px] cursor-pointer hover:border-amber-400 dark:hover:border-amber-500 hover:shadow-md transition-all group"
+                  onClick={() => { setStudentStatusFilter('INACTIVE_PAYMENT_PENDING'); navigateToTab('students'); }}
+                  className="bg-white dark:bg-[#0F172A] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between h-[155px] cursor-pointer hover:border-amber-400 transition-all"
                 >
                   <div className="flex items-center justify-between">
                     <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center">
@@ -1047,82 +1759,46 @@ export const AdminPortalDashboard = () => {
                     <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">Gated</span>
                   </div>
                   <div>
-                    <p className="text-3xl font-black text-amber-600 dark:text-amber-400 leading-none">
-                      {inactiveStudentsCount}
-                    </p>
-                    <p className="text-xs font-semibold text-slate-400 mt-1.5 flex items-center justify-between">
-                      <span>Payment Pending</span>
-                      <span className="opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                    </p>
+                    <p className="text-3xl font-black text-amber-600 dark:text-amber-400 leading-none">{inactiveStudentsCount}</p>
+                    <p className="text-xs font-semibold text-slate-400 mt-1.5">Payment Pending</p>
                   </div>
                 </div>
 
-                {/* 4. Faculty Tutors */}
                 <div
-                  onClick={() => setActiveTab('teachers')}
-                  className="bg-white dark:bg-[#0F172A] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between h-[155px] cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-500 hover:shadow-md transition-all group"
+                  onClick={() => navigateToTab('teachers')}
+                  className="bg-white dark:bg-[#0F172A] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between h-[155px] cursor-pointer hover:border-indigo-400 transition-all"
                 >
                   <div className="flex items-center justify-between">
                     <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
                       <Users className="w-5 h-5" />
                     </div>
-                    <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">Faculty</span>
+                    <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">Staff</span>
                   </div>
                   <div>
-                    <p className="text-3xl font-black text-slate-900 dark:text-white leading-none group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                      {teachers.length}
-                    </p>
-                    <p className="text-xs font-semibold text-slate-400 mt-1.5 flex items-center justify-between">
-                      <span>Teaching Staff</span>
-                      <span className="opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                    </p>
+                    <p className="text-3xl font-black text-slate-900 dark:text-white leading-none">{teachers.length}</p>
+                    <p className="text-xs font-semibold text-slate-400 mt-1.5">Instructors</p>
                   </div>
                 </div>
 
-                {/* 5. Active Applications */}
                 <div
-                  onClick={() => setActiveTab('students')}
-                  className={`bg-white dark:bg-[#0F172A] p-6 rounded-2xl border shadow-xs flex flex-col justify-between h-[155px] cursor-pointer transition-all group ${
-                    studentApplications.length > 0
-                      ? 'border-rose-200 dark:border-rose-900/60 hover:border-rose-400 hover:shadow-md'
-                      : 'border-slate-200/80 dark:border-slate-800 hover:border-blue-400 hover:shadow-md'
-                  }`}
+                  onClick={() => navigateToTab('students')}
+                  className="bg-white dark:bg-[#0F172A] p-6 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-between h-[155px] cursor-pointer hover:border-rose-400 transition-all"
                 >
                   <div className="flex items-center justify-between">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                      studentApplications.length > 0
-                        ? 'bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400'
-                        : 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                    }`}>
+                    <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 flex items-center justify-center">
                       <FileText className="w-5 h-5" />
                     </div>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                      studentApplications.length > 0
-                        ? 'bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
-                    }`}>
-                      {studentApplications.length > 0 ? 'Pending Action' : 'All Reviewed'}
-                    </span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">Intakes</span>
                   </div>
                   <div>
-                    <p className={`text-3xl font-black leading-none ${
-                      studentApplications.length > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'
-                    }`}>
-                      {studentApplications.length}
-                    </p>
-                    <p className="text-xs font-semibold text-slate-400 mt-1.5 flex items-center justify-between">
-                      <span>New Admissions</span>
-                      <span className="opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                    </p>
+                    <p className="text-3xl font-black text-rose-600 dark:text-rose-400 leading-none">{studentApplications.length}</p>
+                    <p className="text-xs font-semibold text-slate-400 mt-1.5">Applications</p>
                   </div>
                 </div>
-
               </div>
 
-              {/* 2-Column Split: Admission Requests & Quick Actions */}
+              {/* 2-Column Split: Applications & Quick Actions */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
-                {/* Left (2 Columns Wide): Pending Applications */}
                 <div className="lg:col-span-2 bg-white dark:bg-[#0F172A] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-6 sm:p-7 shadow-xs flex flex-col justify-between">
                   <div>
                     <div className="flex items-center justify-between pb-5 border-b border-slate-100 dark:border-slate-800/80">
@@ -1136,7 +1812,7 @@ export const AdminPortalDashboard = () => {
                       </div>
 
                       <button
-                        onClick={() => setActiveTab('students')}
+                        onClick={() => navigateToTab('students')}
                         className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
                       >
                         <span>View all roster</span>
@@ -1185,16 +1861,11 @@ export const AdminPortalDashboard = () => {
                   </div>
                 </div>
 
-                {/* Right (1 Column Wide): Admin Quick Actions */}
                 <div className="bg-white dark:bg-[#0F172A] rounded-2xl border border-slate-200/80 dark:border-slate-800 p-6 sm:p-7 shadow-xs flex flex-col justify-between">
                   <div>
                     <div className="pb-5 border-b border-slate-100 dark:border-slate-800/80">
-                      <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                        Admin Quick Actions
-                      </h3>
-                      <p className="text-xs text-slate-400 mt-0.5 font-medium">
-                        Standard operational workflows
-                      </p>
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white">Admin Quick Actions</h3>
+                      <p className="text-xs text-slate-400 mt-0.5 font-medium">Standard operational workflows</p>
                     </div>
 
                     <div className="mt-5 space-y-3.5">
@@ -1218,7 +1889,7 @@ export const AdminPortalDashboard = () => {
                       <button
                         onClick={() => {
                           setIsEditingTeacher(false);
-                          setTeacherForm({ id: 0, name: '', email: '', phone: '', employee_id: '', course_id: '' });
+                          setTeacherForm({ id: 0, name: '', email: '', phone: '', employee_id: '' });
                           setShowTeacherModal(true);
                         }}
                         className="w-full p-3.5 rounded-2xl bg-emerald-50/80 dark:bg-emerald-600/10 border border-emerald-200/70 dark:border-emerald-500/20 hover:bg-emerald-100/70 dark:hover:bg-emerald-600/20 text-emerald-700 dark:text-emerald-400 flex items-center gap-3.5 text-left transition-all cursor-pointer"
@@ -1276,28 +1947,6 @@ export const AdminPortalDashboard = () => {
                   </div>
                 </div>
               </div>
-
-              {/* Bottom Administrative Status Banner */}
-              <div className="rounded-2xl bg-[#0F172A] text-white p-5 sm:p-6 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-5 shadow-sm">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-slate-800 text-blue-400 flex items-center justify-center font-bold shrink-0">
-                    <ShieldCheck className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold tracking-tight">Campus Administrative Readiness</h4>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      System running across {cohorts.length} vacation batches, {courses.length} subjects, and {students.length} students.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 self-end md:self-auto w-full md:w-56">
-                  <div className="flex-1 bg-slate-800 rounded-full h-2 overflow-hidden">
-                    <div className="bg-emerald-400 h-full rounded-full w-[100%] transition-all duration-700"></div>
-                  </div>
-                  <span className="font-mono text-xs font-bold text-slate-300">100% Online</span>
-                </div>
-              </div>
             </div>
           )}
 
@@ -1312,7 +1961,7 @@ export const AdminPortalDashboard = () => {
                 <button
                   onClick={() => {
                     setIsEditingTeacher(false);
-                    setTeacherForm({ id: 0, name: '', email: '', phone: '', employee_id: '', course_id: '' });
+                    setTeacherForm({ id: 0, name: '', email: '', phone: '', employee_id: '' });
                     setShowTeacherModal(true);
                   }}
                   className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer"
@@ -1412,7 +2061,6 @@ export const AdminPortalDashboard = () => {
                               email: teacher.email,
                               phone: teacher.phone || '',
                               employee_id: teacher.employee_id || '',
-                              course_id: '',
                             });
                             setIsEditingTeacher(true);
                             setShowTeacherModal(true);
@@ -1431,182 +2079,6 @@ export const AdminPortalDashboard = () => {
                     </div>
                   );
                 })}
-              </div>
-            </section>
-          )}
-
-          {/* ==================== TAB 3: STUDENTS DIRECTORY ==================== */}
-          {activeTab === 'students' && (
-            <section className="bg-white dark:bg-[#0F172A] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xs max-w-[1400px] mx-auto">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-                <div>
-                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">SHS Students & Tuition Firewall</h2>
-                  <p className="text-xs text-slate-400">Manage student registrations, academic enrollment, and tuition access clearance.</p>
-                </div>
-                <button
-                  onClick={() => {
-                    setIsEditingStudent(false);
-                    setStudentForm({ id: 0, name: '', email: '', phone: '', cohort_id: globalCohortId || cohorts[0]?.id || '', status: 'ACTIVE', course_ids: [] });
-                    setShowStudentModal(true);
-                  }}
-                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md shadow-blue-600/20 transition-all cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Enroll Student</span>
-                </button>
-              </div>
-
-              {createdStudentCreds && (
-                <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-950 dark:text-emerald-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-in fade-in duration-200">
-                  <div>
-                    <div className="flex items-center gap-2 font-bold text-sm text-emerald-800 dark:text-emerald-400">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                      Student Registered & Credentials Ready!
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2 text-xs font-mono">
-                      <span className="bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800">
-                        <strong>Name:</strong> {createdStudentCreds.name}
-                      </span>
-                      <span className="bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800">
-                        <strong>Login:</strong> {createdStudentCreds.email}
-                      </span>
-                      <span className="bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800">
-                        <strong>Index:</strong> {createdStudentCreds.student_number}
-                      </span>
-                      <span className="bg-white dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 text-blue-600 dark:text-blue-400 font-bold">
-                        <strong>Password:</strong> {createdStudentCreds.temporary_password}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={async () => {
-                      const credText = `Student Credentials:\nName: ${createdStudentCreds.name}\nLogin: ${createdStudentCreds.email}\nIndex No: ${createdStudentCreds.student_number}\nPassword: ${createdStudentCreds.temporary_password}`;
-                      try {
-                        await copyToClipboard(credText);
-                        setCopiedStudentKey(true);
-                        showToastNotification('Credentials copied!', 'success');
-                        setTimeout(() => setCopiedStudentKey(false), 3000);
-                      } catch (_) {
-                        showToastNotification('Please copy credentials manually.', 'error');
-                      }
-                    }}
-                    className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer"
-                  >
-                    {copiedStudentKey ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    {copiedStudentKey ? 'Copied' : 'Copy Student Logins'}
-                  </button>
-                </div>
-              )}
-
-              {/* Search & Status Filter */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="relative sm:col-span-2">
-                  <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search students by name, email, or index number..."
-                    value={studentSearch}
-                    onChange={(e) => setStudentSearch(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <select
-                    value={studentStatusFilter}
-                    onChange={(e) => setStudentStatusFilter(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500"
-                  >
-                    <option value="all">All Students ({students.length})</option>
-                    <option value="ACTIVE">Active (Tuition Paid) ({activeStudentsCount})</option>
-                    <option value="INACTIVE_PAYMENT_PENDING">Gated (Payment Pending) ({inactiveStudentsCount})</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Students Table */}
-              <div className="overflow-x-auto rounded-2xl border border-slate-200/80 dark:border-slate-800">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 uppercase font-bold text-[10px] border-b border-slate-200/80 dark:border-slate-800">
-                    <tr>
-                      <th className="py-3.5 px-4">Student</th>
-                      <th className="py-3.5 px-4">Contact</th>
-                      <th className="py-3.5 px-4">Vacation Batch</th>
-                      <th className="py-3.5 px-4">Access Status</th>
-                      <th className="py-3.5 px-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-medium">
-                    {filteredStudents.map((s) => {
-                      const isActive = s.status === 'ACTIVE';
-                      const studentCohort = cohorts.find((c) => Number(c.id) === Number(s.cohort_id));
-                      return (
-                        <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                          <td className="py-3.5 px-4">
-                            <p className="font-bold text-slate-900 dark:text-white">{s.name}</p>
-                            <p className="text-[11px] font-mono text-slate-400">{s.student_number || 'STU-Auto'}</p>
-                          </td>
-                          <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">
-                            <p>{s.email}</p>
-                            <p className="text-[11px] text-slate-400">{s.phone || 'No phone'}</p>
-                          </td>
-                          <td className="py-3.5 px-4">
-                            {studentCohort ? (
-                              <span className="font-mono text-xs font-bold text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/30 px-2.5 py-0.5 rounded-full border border-purple-200 dark:border-purple-800">
-                                {studentCohort.code}
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 italic">Unassigned</span>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-4">
-                            <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
-                                isActive ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800'
-                              }`}
-                            >
-                              {isActive ? 'Active (Paid)' : 'Gated (Unpaid)'}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-4 text-right space-x-2">
-                            <button
-                              onClick={() => handleToggleStudentStatus(s)}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                                isActive ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-400 border border-amber-200 dark:border-amber-800 hover:bg-amber-100' : 'bg-emerald-600 text-white hover:bg-emerald-500'
-                              }`}
-                            >
-                              {isActive ? 'Gate Access' : 'Clear Payment'}
-                            </button>
-                            <button
-                              onClick={() => {
-                                const enrolledIds = (s.enrollments || []).map((e) => e.course_id || e.course?.id).filter(Boolean);
-                                setStudentForm({
-                                  id: s.id,
-                                  name: s.name,
-                                  email: s.email,
-                                  phone: s.phone || '',
-                                  cohort_id: s.cohort_id || '',
-                                  status: s.status || 'ACTIVE',
-                                  course_ids: enrolledIds,
-                                });
-                                setIsEditingStudent(true);
-                                setShowStudentModal(true);
-                              }}
-                              className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-xl inline-block cursor-pointer"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => setDeleteTarget({ type: 'student', id: s.id, title: `Student: ${s.name}` })}
-                              className="p-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-xl inline-block cursor-pointer"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
               </div>
             </section>
           )}
@@ -1713,7 +2185,7 @@ export const AdminPortalDashboard = () => {
                         </div>
                         <h4 className="font-bold text-slate-900 dark:text-white text-base mt-3">{course.title}</h4>
                         <p className="text-xs text-slate-400 mt-1 line-clamp-2">{course.description || 'No syllabus overview provided.'}</p>
-                        
+
                         <div className="mt-4 pt-3 border-t border-slate-200/60 dark:border-slate-800 space-y-1.5 text-xs text-slate-400">
                           <p>Teacher: <strong className="text-slate-900 dark:text-white">{teacher?.name || 'Unassigned'}</strong></p>
                           <p>Credit Units: <strong className="text-slate-900 dark:text-white">{course.credit_hours || 3}</strong></p>
@@ -2175,7 +2647,6 @@ export const AdminPortalDashboard = () => {
                   ))}
                 </select>
               </div>
-
               <div>
                 <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Tuition Access Status</label>
                 <select

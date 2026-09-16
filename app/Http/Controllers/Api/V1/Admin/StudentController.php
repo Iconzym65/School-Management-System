@@ -23,7 +23,6 @@ class StudentController extends Controller
     public function index(Request $request): JsonResponse
     {
         $students = User::query()
-            // ADDED 'cohort' to eager loading so the badge updates instantly
             ->with(['role', 'cohort', 'enrollments.course.cohort'])
             ->whereHas('role', fn ($q) => $q->where('slug', RoleSlug::Student->value))
             ->when($request->integer('cohort_id'), function ($q, $cohortId) {
@@ -105,7 +104,41 @@ class StudentController extends Controller
     {
         abort_unless($student->isStudent(), 404);
 
-        return ApiResponse::success(new UserResource($student->load(['role', 'cohort', 'enrollments.course.cohort'])));
+        $student->load(['role', 'cohort', 'enrollments.course.cohort']);
+
+        $application = DB::table('student_applications')
+            ->where('student_email', $student->email)
+            ->first();
+
+        $resource = (new UserResource($student))->resolve();
+
+        return ApiResponse::success(array_merge($resource, [
+            'student' => $resource,
+            'application' => [
+                'first_name' => $application->first_name ?? null,
+                'middle_name' => $application->middle_name ?? null,
+                'last_name' => $application->last_name ?? null,
+                'gender' => $application->gender ?? null,
+                'dob' => $application->dob ?? null,
+                'student_phone' => $application->student_phone ?? $student->phone ?? null,
+                'student_email' => $application->student_email ?? $student->email,
+                'residential_address' => $application->residential_address ?? null,
+                'city' => $application->city ?? null,
+                'previous_institution' => $application->previous_institution ?? null,
+                'current_level' => $application->current_level ?? null,
+                'stream_track' => $application->stream_track ?? null,
+                'student_id_reference' => $application->student_id_reference ?? null,
+                'selected_courses' => isset($application->selected_courses) ? json_decode($application->selected_courses, true) : [],
+                'guardian_name' => $application->guardian_name ?? null,
+                'guardian_relationship' => $application->guardian_relationship ?? null,
+                'guardian_email' => $application->guardian_email ?? null,
+                'guardian_phone' => $application->guardian_phone ?? null,
+                'guardian_whatsapp' => $application->guardian_whatsapp ?? null,
+                'application_status' => $application->status ?? null,
+                'approved_at' => $application->approved_at ?? null,
+            ],
+            'enrolled_course_ids' => $student->enrollments->pluck('course_id')->values()->all(),
+        ]));
     }
 
     public function update(Request $request, User $student): JsonResponse
@@ -113,6 +146,7 @@ class StudentController extends Controller
         abort_unless($student->isStudent(), 404);
 
         $data = $request->validate([
+            // User Table Attributes
             'name' => ['sometimes', 'string', 'max:255'],
             'email' => ['sometimes', 'email', 'max:255', Rule::unique('users', 'email')->ignore($student->id)],
             'phone' => ['nullable', 'string', 'max:32'],
@@ -121,13 +155,32 @@ class StudentController extends Controller
             'cohort_id' => ['sometimes', 'nullable', 'exists:cohorts,id'],
             'course_ids' => ['nullable', 'array'],
             'course_ids.*' => ['exists:courses,id'],
+
+            // Student Application Attributes
+            'first_name' => ['nullable', 'string', 'max:100'],
+            'middle_name' => ['nullable', 'string', 'max:100'],
+            'last_name' => ['nullable', 'string', 'max:100'],
+            'gender' => ['nullable', 'string', 'max:32'],
+            'dob' => ['nullable', 'date'],
+            'residential_address' => ['nullable', 'string'],
+            'city' => ['nullable', 'string', 'max:100'],
+            'previous_institution' => ['nullable', 'string', 'max:255'],
+            'current_level' => ['nullable', 'string', 'max:100'],
+            'stream_track' => ['nullable', 'string', 'max:100'],
+            'student_id_reference' => ['nullable', 'string', 'max:100'],
+            'guardian_name' => ['nullable', 'string', 'max:255'],
+            'guardian_relationship' => ['nullable', 'string', 'max:100'],
+            'guardian_email' => ['nullable', 'email', 'max:255'],
+            'guardian_phone' => ['nullable', 'string', 'max:32'],
+            'guardian_whatsapp' => ['nullable', 'string', 'max:32'],
         ]);
 
         DB::transaction(function () use ($request, $student, $data) {
-            // 1. Force explicit update of basic details and cohort
+            // 1. Update Core User Model
             $student->name = $data['name'] ?? $student->name;
             $student->email = $data['email'] ?? $student->email;
             $student->phone = array_key_exists('phone', $data) ? $data['phone'] : $student->phone;
+            $student->student_number = $data['student_number'] ?? $student->student_number;
             $student->status = $data['status'] ?? $student->status;
 
             if ($request->has('cohort_id')) {
@@ -136,7 +189,39 @@ class StudentController extends Controller
 
             $student->save();
 
-            // 2. Sync manual subject enrollments safely
+            // 2. Update Student Application Bio-Data
+            $appFields = [
+                'first_name', 'middle_name', 'last_name', 'gender', 'dob',
+                'residential_address', 'city', 'previous_institution',
+                'current_level', 'stream_track', 'student_id_reference',
+                'guardian_name', 'guardian_relationship', 'guardian_email',
+                'guardian_phone', 'guardian_whatsapp',
+            ];
+
+            $appUpdate = [];
+            foreach ($appFields as $field) {
+                if (array_key_exists($field, $data)) {
+                    $appUpdate[$field] = $data[$field];
+                }
+            }
+
+            if ($request->has('cohort_id') && $student->cohort_id) {
+                $appUpdate['cohort_id'] = $student->cohort_id;
+            }
+            if ($request->has('phone')) {
+                $appUpdate['student_phone'] = $data['phone'];
+            }
+            if ($request->has('email')) {
+                $appUpdate['student_email'] = $data['email'];
+            }
+
+            if (! empty($appUpdate)) {
+                DB::table('student_applications')
+                    ->where('student_email', $student->getOriginal('email'))
+                    ->update($appUpdate);
+            }
+
+            // 3. Synchronize Selected Courses
             if ($request->has('course_ids')) {
                 $selectedIds = collect($data['course_ids'] ?? [])->map(fn ($id) => (int) $id)->all();
 
@@ -156,7 +241,7 @@ class StudentController extends Controller
 
         return ApiResponse::success(
             new UserResource($student->fresh(['role', 'cohort', 'enrollments.course.cohort'])),
-            'Student details updated.'
+            'Student profile, registration record, and course assignments updated.'
         );
     }
 

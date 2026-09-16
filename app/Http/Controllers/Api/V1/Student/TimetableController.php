@@ -63,6 +63,14 @@ class TimetableController extends Controller
 
     public function join(Timetable $timetable): JsonResponse
     {
+        if (! $timetable->meetingIsOpenAt(now())) {
+            return ApiResponse::error(
+                'This virtual session is currently not open for attendance.',
+                403,
+                'MEETING_NOT_OPEN'
+            );
+        }
+
         return ApiResponse::success([
             'meeting_link' => $timetable->meeting_link,
         ]);

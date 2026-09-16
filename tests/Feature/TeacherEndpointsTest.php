@@ -19,6 +19,7 @@ use App\Models\Timetable;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
@@ -29,11 +30,17 @@ class TeacherEndpointsTest extends TestCase
     use RefreshDatabase;
 
     protected Role $studentRole;
+
     protected Role $teacherRole;
+
     protected User $student;
+
     protected User $teacher;
+
     protected User $otherTeacher;
+
     protected Course $course;
+
     protected Timetable $timetable;
 
     protected function setUp(): void
@@ -215,26 +222,32 @@ class TeacherEndpointsTest extends TestCase
 
     public function test_teacher_can_save_attendance(): void
     {
-        Sanctum::actingAs($this->teacher);
+        Carbon::setTestNow('2026-09-07 12:00:00');
 
-        $response = $this->postJson("/api/v1/teacher/timetables/{$this->timetable->id}/attendance", [
-            'session_date' => '2026-09-07',
-            'records' => [
-                [
-                    'student_id' => $this->student->id,
-                    'status' => 'PRESENT',
-                    'notes' => 'Attended class.',
+        try {
+            Sanctum::actingAs($this->teacher);
+
+            $response = $this->postJson("/api/v1/teacher/timetables/{$this->timetable->id}/attendance", [
+                'session_date' => '2026-09-07',
+                'records' => [
+                    [
+                        'student_id' => $this->student->id,
+                        'status' => 'PRESENT',
+                        'notes' => 'Attended class.',
+                    ],
                 ],
-            ],
-        ]);
+            ]);
 
-        $response->assertOk();
-        $this->assertDatabaseHas('attendances', [
-            'timetable_id' => $this->timetable->id,
-            'student_id' => $this->student->id,
-            'session_date' => '2026-09-07',
-            'status' => 'PRESENT',
-        ]);
+            $response->assertOk();
+            $this->assertDatabaseHas('attendances', [
+                'timetable_id' => $this->timetable->id,
+                'student_id' => $this->student->id,
+                'session_date' => '2026-09-07',
+                'status' => 'PRESENT',
+            ]);
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     public function test_teacher_can_manage_assignments(): void
